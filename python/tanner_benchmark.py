@@ -182,7 +182,7 @@ if __name__ == '__main__':
             subgrp.create_dataset(f"branching_d{D}_g{g}_ler", data=branching_stats_g['ler'])
             subgrp.create_dataset(f"branching_d{D}_g{g}_eb", data=branching_stats_g['ler_eb'])
 
-        # TODO: Store SS size statistics for each decoder
+        # Store SS size statistics for each decoder (todo add others)
         subgrp.create_dataset(f"avgSS_branch_d={D}", data=tanner_code_hgp.avg_SS_size_by_er["branch"].flatten())
         
     
