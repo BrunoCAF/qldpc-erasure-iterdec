@@ -64,8 +64,8 @@ MC_budget = {
         # 2: [int(1e6), int(1e5), int(1e5), int(1e4), int(5e3)]+[int(1e3)]*5+[int(5e2)]*5, 
     }, 
     "ML": {
-        0: [int(1e6)]*5 + [int(5e5), int(5e5), int(1e5), int(1e4), int(1e4)], 
-        1: [int(1e6)]+[int(1e5)]*3+[int(1e4)]*3+[int(1e3)]*3, 
+        0: [int(1e3)]*3 + [int(1e6)]*2 + [int(5e5), int(5e5), int(1e5), int(1e4), int(1e4)], 
+        1: [int(5e5)]+[int(1e5)]*3+[int(1e4)]*3+[int(1e3)]*3, 
         # 2: [int(1e5)]*2+[int(1e4)]*3+[int(1e3)]*10,
     }
 }
@@ -92,7 +92,7 @@ if __name__ == '__main__':
     if C // 3 == 1:
         code = sp.csr_array((code.T @ code).todense() & 1)
     
-    if E == 0 and D == 0:
+    if E == 9 and D == 0:
         n, k, d, (s, _, _) = code.shape[1], code_dimension(code), code_distance(code), smallest_SS_weight(code)
         nt, kt, dt, (st, _, _) = code.shape[0], code_dimension(code.T), code_distance(code.T), smallest_SS_weight(code.T)
         print(f'Classical (base) code params: [{n=}, {k=}, {d=}, {s=}], [n^t={nt}, k^t={kt}, d^t={dt}, s^t={st}]')    
