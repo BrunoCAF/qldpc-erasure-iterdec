@@ -6,7 +6,7 @@ import networkx.algorithms.bipartite as bpt
 import pym4ri
 
 from experiments_settings import code_distance, code_dimension, smallest_SS_weight
-from css_code_eval import MC_erasure_plog, MC_peeling_HGP, _HGP_peel, HGP, _fast_peel, stabilizer_search
+from css_code_eval import MC_erasure_plog, MC_peeling_HGP, _HGP_peel, HGP, _fast_peel, peel_prune_guess, stabilizer_search
 
 from typing import Callable, Self
 from tqdm import tqdm
@@ -131,6 +131,9 @@ class TannerCodeHGP:
         self.std_Hz = sp.csr_array(sp.hstack([sp.kron(I(n1), H2), sp.kron(H1.T, I(m2))]).todense() & 1)
         self.std_Hx = sp.csr_array(sp.hstack([sp.kron(H1, I(n2)), sp.kron(I(m1), H2.T)]).todense() & 1)
 
+        self.eta_Hx = pym4ri.gen2chk(self.std_Hx.astype(bool).todense())
+        self.eta_Hz = pym4ri.gen2chk(self.std_Hz.astype(bool).todense())
+
         self.classic_C1_tanner_splitting = np.cumsum([0]+[lsc.shape[0] for lsc in classic_tanner_C1.local_subcodes], dtype=int)
         self.classic_C2_tanner_splitting = np.cumsum([0]+[lsc.shape[0] for lsc in classic_tanner_C2.local_subcodes], dtype=int)
 
@@ -200,17 +203,6 @@ class TannerCodeHGP:
         # From that we can also compute and store the local subcode distances. 
         # Design choice: precompute and store the distances, but don't store the local subcodes as separate objects.
         # When it comes to using them for decoding, extract them as needed. 
-        
-        # # self.local_subcodes_full_Hx = lambda i: self.std_Hx[???, <support>]
-        # self.local_distances_full_Hx = np.zeros((t1*n2,))
-        # # self.local_subcodes_full_Hz = lambda i: self.std_Hz[???, <support>]
-        # self.local_distances_full_Hz = np.zeros((n1*t2,))
-
-        # If we were to precompute distances: 
-        # for i in range(t1*n2):
-        #     self.local_distances_full_Hx[i] = code_distance(self.local_subcodes_full_Hx(i))
-        # for i in range(n1*t2):
-        #     self.local_distances_full_Hz[i] = code_distance(self.local_subcodes_full_Hz(i))
         
 
     def local_subcodes_full_Hx(self, i:int) -> tuple[sp.csr_array, np.ndarray]:
@@ -498,6 +490,7 @@ class TannerCodeHGP:
 
         # Try to solve until both peeling, pruning and generalized peeling fail (or succeed)
         # print('X:')
+        # But first check if ML works. I know, it's more costly, but it's simpler to gather the SS size stats this way. 
         normal_peeling_X_success, pruning_X_success, gen_peeling_X_success = \
             self._peel_v5(erasure_X, self.std_Hz, self.outer_Hz, self.local_subcodes_full_Hz, self.std_Hx, pruning_depth)
             
@@ -530,6 +523,7 @@ class TannerCodeHGP:
         peeling_success = self.peel_0(erasure, std_H)
         if not peeling_success: # NOTE: keep track of smallest failure set
             self.min_SS_size['peel'] = min(self.min_SS_size['peel'], np.count_nonzero(erasure))
+            self.avg_SS_size['peel'] += np.count_nonzero(erasure)
 
         # After peeling stops, do pruning
         pruning_success = [True]*pruning_depth
@@ -544,6 +538,7 @@ class TannerCodeHGP:
                 for i, ps in enumerate(pruning_success): # NOTE: keep track of smallest failure set
                     if not ps:
                         self.min_SS_size['prun'][i] = min(self.min_SS_size['prun'][i], np.count_nonzero(erasure))
+                        self.avg_SS_size['prun'][i] += np.count_nonzero(erasure)
                 # If found, arbiter the correction over a qubit inside its support (and unerase it)
                 if found_at_depth[-1]:
                     gauge_qubits = np.nonzero(stabilizer)[0]
@@ -588,16 +583,65 @@ class TannerCodeHGP:
                     self.peel_0(erasure, std_H)
                 else:
                     self.min_SS_size['gen peel'] = min(self.min_SS_size['gen peel'], np.count_nonzero(erasure)) # NOTE: keep track of smallest failure set
+                    self.avg_SS_size['gen peel'] += np.count_nonzero(erasure)
                     return peeling_success, pruning_success, False
 
         return peeling_success, pruning_success, True
 
+    def peel_v7(self, erasure: np.ndarray, max_pruning_depth: int, only_X: bool=False) -> list[bool]:
+        """
+        Peeling v6 is peeling+pruning+branching or guessing. 
+        Pruning at depth at most 1, but generalizable. 
+        Up to 6 guesses available, but will be further generalized. 
+        """
+        # X-type error:
+        erasure_X = erasure.copy()
+
+        # Try to solve until both peeling+branching fails or succeeds
+        branching_X_success = self._peel_v7(erasure_X, self.std_Hz, self.std_Hx, self.eta_Hx, max_pruning_depth, 'X')
+            
+        if only_X or not branching_X_success[-1]:
+            return branching_X_success
+        else:
+            # Z-type error: 
+            erasure_Z = erasure.copy()
+
+            # Try to solve until both peeling+branching fails or succeeds
+            branching_Z_success = self._peel_v7(erasure_Z, self.std_Hx, self.std_Hz, self.eta_Hz, max_pruning_depth, 'Z')
+            return [bXs and bZs for bXs, bZs in zip(branching_X_success, branching_Z_success)]
+
+    def _peel_v7(self, erasure: np.ndarray, std_H: sp.csr_array, std_Hconj: sp.csr_array, eta_H_conj: np.ndarray, max_pruning_depth: int, x_or_z: str) -> list[bool]:
+        ML_success = {'X': self.ML_X_success, 'Z': self.ML_Z_success}[x_or_z]
+        initial_erasure = erasure.copy()
+        correction_u64, num_guesses, max_used_guesses, erasure_sizes = peel_prune_guess(erasure, std_H.indptr, std_H.indices, std_Hconj.indptr, std_Hconj.indices, max_pruning_depth)
+        num_branches = 1<<num_guesses
+        correction = np.unpackbits(correction_u64.view(np.uint8).reshape(-1, 8), axis=1, bitorder='little').astype(bool)[:, :num_branches]
+
+        if ML_success:
+            for g in range(6+1):
+                if g < max_used_guesses:
+                    self.min_SS_size['branch'][g] = min(self.min_SS_size['branch'][g], erasure_sizes[g])
+                    self.avg_SS_size['branch'][g].append(erasure_sizes[g])
+                    
+        if np.any(correction > initial_erasure[:, None]):
+            # Branching failure
+            return [False]*7
+        else:
+            assert not np.any(erasure)
+            
+        succ = not np.any(pym4ri.gf2_mul(eta_H_conj[:, initial_erasure], correction[initial_erasure, :]))
+
+        if not succ:
+            assert not ML_success
+            
+        return ([False]*max_used_guesses + [True]*(7-max_used_guesses)) if succ else [False]*7
+    
     def gen_peel_benchmark(self, p_vals:np.ndarray[float], max_num_trials:int, min_num_fails:int=None, pruning_depth: int=1,
                           only_X:bool=False) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray], dict[int, dict[str, np.ndarray]]]:
         (m1, n1, _), (m2, n2, _) = self.shapes
         N = n1*n2 + m1*m2
         
-        mean = lambda n_fail, n_total: n_fail/n_total
+        mean = lambda n_fail, n_total: n_fail/max(1, n_total)
         std = lambda n_fail, n_total: ((n_fail*(n_total - n_fail)) / (n_total*(n_total - 1)))**.5
         eb = lambda n_fail, n_total: 1.96*std(n_fail, n_total)/np.sqrt(n_total)
         
@@ -611,12 +655,14 @@ class TannerCodeHGP:
         generalized_peeling_failures = np.zeros_like(p_vals)
 
         self.min_SS_size = {"peel": N, "prun": [N]*pruning_depth, "gen peel": N}
+        self.avg_SS_size_by_er = [{"peel": 0, "prun": np.array([0]*pruning_depth), "gen peel": 0} for _ in range(len(p_vals))]
         
         if min_num_fails is None:
                 min_num_fails = max_num_trials
         
         for i, er in enumerate(p_vals):
             num_trials = max_num_trials
+            self.avg_SS_size = self.avg_SS_size_by_er[i]
             for t in (pbar := tqdm(range(max_num_trials))):
                 descr = f'#failures: Peel. {normal_peeling_failures[i]:.0f}'
                 for d, pruning_failures_d in pruning_failures.items():                    
@@ -649,6 +695,11 @@ class TannerCodeHGP:
                     num_trials = t+1
                     break
 
+            self.avg_SS_size_by_er[i]["peel"] /= max(1, normal_peeling_failures[i])
+            for d in range(pruning_depth):
+                self.avg_SS_size_by_er[i]["prun"][d] /= max(1, pruning_failures[d+1][i])
+            self.avg_SS_size_by_er[i]["gen peel"] /= max(1, generalized_peeling_failures[i])
+
             normal_peeling_stats["ler"][i] = mean(normal_peeling_failures[i], num_trials)
             normal_peeling_stats["ler_eb"][i] = eb(normal_peeling_failures[i], num_trials)
 
@@ -659,8 +710,83 @@ class TannerCodeHGP:
             generalized_peeling_stats["ler"][i] = mean(generalized_peeling_failures[i], num_trials)
             generalized_peeling_stats["ler_eb"][i] = eb(generalized_peeling_failures[i], num_trials)
 
+        self.avg_SS_size_by_er = {
+            "peel": np.array([self.avg_SS_size_by_er[i]["peel"] for i in range(len(p_vals))]), 
+            "prun": np.stack([self.avg_SS_size_by_er[i]["prun"] for i in range(len(p_vals))]), 
+            "gen peel": np.array([self.avg_SS_size_by_er[i]["gen peel"] for i in range(len(p_vals))]), 
+        }
+
         return normal_peeling_stats, pruning_stats, generalized_peeling_stats
 
+    def peel_guess_benchmark(self, p_vals:np.ndarray[float], max_num_trials:int, min_num_fails:int=100, pruning_depth: int=1,
+                          only_X:bool=False) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray], dict[int, dict[str, np.ndarray]]]:
+        (m1, n1, _), (m2, n2, _) = self.shapes
+        N = n1*n2 + m1*m2
+        
+        mean = lambda n_fail, n_total: n_fail/max(1, n_total)
+        std = lambda n_fail, n_total: ((n_fail*(n_total - n_fail)) / (n_total*(n_total - 1)))**.5
+        eb = lambda n_fail, n_total: 1.96*std(n_fail, n_total)/np.sqrt(n_total)
+        
+        ML_stats = {"ler": np.zeros_like(p_vals), "ler_eb": np.zeros_like(p_vals)}
+        ML_failures = np.zeros_like(p_vals)
+        
+        branching_stats = {g: {"ler": np.zeros_like(p_vals), "ler_eb": np.zeros_like(p_vals)} for g in range(6+1)}
+        branching_failures = {g: np.zeros_like(p_vals) for g in range(6+1)}
+
+        self.min_SS_size = {"branch": [N]*7}
+        self.avg_SS_size_by_er = [{"branch": [[] for _ in range(7)]} for _ in range(len(p_vals))]
+        
+        for i, er in enumerate(p_vals):
+            num_trials = max_num_trials
+            self.avg_SS_size = self.avg_SS_size_by_er[i]
+            for t in (pbar := tqdm(range(max_num_trials))):
+                descr = f'#failures: Branching+Pruning(D={pruning_depth}) '
+                for g, branching_failures_g in branching_failures.items():
+                    descr += f'G={g}: {branching_failures_g[i]:.0f} | '
+                pbar.set_description(descr)
+
+                erasure = npr.rand(N) < er
+                
+                # Precompute ML_success
+                gamma_Hz_E = pym4ri.chk2gen(self.std_Hz[:, erasure].astype(bool).todense())
+                eta_Hx_E = self.eta_Hx[:, erasure]
+                self.ML_X_success = not np.any(pym4ri.gf2_mul(eta_Hx_E, gamma_Hz_E))
+                gamma_Hx_E = pym4ri.chk2gen(self.std_Hx[:, erasure].astype(bool).todense())
+                eta_Hz_E = self.eta_Hz[:, erasure]
+                self.ML_Z_success = not np.any(pym4ri.gf2_mul(eta_Hz_E, gamma_Hx_E))
+                self.ML_success = self.ML_X_success and self.ML_Z_success
+                
+                assert pruning_depth <= 1
+                branching_success = self.peel_v7(erasure.copy(), max_pruning_depth=pruning_depth, only_X=only_X)
+
+                # Sanity check:
+                if self.ML_success < branching_success[-1]:
+                    print(f"wtf??? {self.ML_success = }, {branching_success = }")
+                    print(np.nonzero(erasure)[0])
+
+                ML_failures[i] += 1 if not self.ML_success else 0
+                for branching_failures_g, branching_success_g in zip(branching_failures.values(), branching_success):
+                    branching_failures_g[i] += 1 if not branching_success_g else 0              
+                
+                if branching_failures[6][i] >= min_num_fails:
+                    num_trials = t+1
+                    break
+                        
+            ML_stats["ler"][i] = mean(ML_failures[i], num_trials)
+            ML_stats["ler_eb"][i] = eb(ML_failures[i], num_trials)
+            
+            for branching_stats_g, branching_failures_g in zip(branching_stats.values(), branching_failures.values()):
+                branching_stats_g["ler"][i] = mean(branching_failures_g[i], num_trials)
+                branching_stats_g["ler_eb"][i] = eb(branching_failures_g[i], num_trials)
+            
+            for g in range(6+1):
+                self.avg_SS_size_by_er[i]["branch"][g] = mean(sum(self.avg_SS_size_by_er[i]["branch"][g]), len(self.avg_SS_size_by_er[i]["branch"][g]))
+
+        self.avg_SS_size_by_er = {
+            "branch": np.stack([np.array(self.avg_SS_size_by_er[i]["branch"]) for i in range(len(p_vals))]), 
+        }
+        
+        return ML_stats, branching_stats
 
 
 if __name__ == '__main__':
@@ -761,33 +887,48 @@ if __name__ == '__main__':
     v = [n for n, b in theta.nodes(data='bipartite') if b == 1]
     H = sp.csr_array(bpt.biadjacency_matrix(theta, row_order=sorted(c), column_order=sorted(v)).todense() & 1)
     Hx, Hz = HGP(H)
-    assert np.all(Hx.todense() == new_tanner_hgp.std_Hx.todense())
-    assert np.all(Hz.todense() == new_tanner_hgp.std_Hz.todense())
+    # assert np.all(Hx.todense() == new_tanner_hgp.std_Hx.todense())
+    # assert np.all(Hz.todense() == new_tanner_hgp.std_Hz.todense())
     
-    erasure_rate = np.array([0.15, 0.25, 0.35])
-    npr.seed(200)
-    normal_peeling_stats, pruning_stats, generalized_peeling_stats = new_tanner_hgp.gen_peel_benchmark(erasure_rate, 
-                                                                                                       max_num_trials=int(1e3), 
-                                                                                                       pruning_depth=1)
-    
+    erasure_rate = np.linspace(0.3, 0.4, 5)
+    npr.seed(42)
+    # ML_stats, normal_peeling_stats, pruning_stats, generalized_peeling_stats, branching_stats = new_tanner_hgp.gen_peel_benchmark(erasure_rate, 
+    #                                                                                                                               max_num_trials=int(1e3), 
+    #                                                                                                                               pruning_depth=1)
+
+    ML_stats, branching_stats = new_tanner_hgp.peel_guess_benchmark(erasure_rate, max_num_trials=int(1e3), pruning_depth=0)
+
     theta = bpt.from_biadjacency_matrix(new_tanner_code.std_H, create_using=nx.MultiGraph)
-    # ML_results = MC_erasure_plog(int(1e4), state=theta, p_vals=erasure_rate)
-    
-    # Pure peeling: 
-    npr.seed(200)
-    peeling_results = MC_peeling_HGP(int(1e3), state=theta, p_vals=erasure_rate)
 
     print(new_tanner_hgp.min_SS_size)
-    
-    fig, ax = plt.subplots(1, 1)
+
+    fig, ax = plt.subplots(1, 1, figsize=(12, 5))
     ax.set_yscale('log')
-    # ax.errorbar(erasure_rate, ML_results["mean"], 1.96*ML_results["std"]/1e2, label="ML")
-    ax.errorbar(erasure_rate, normal_peeling_stats["ler"], normal_peeling_stats["ler_eb"], label="normal")
-    for d, stats in pruning_stats.items():
-        ax.errorbar(erasure_rate, stats["ler"], stats["ler_eb"], label=f"pruning depth={d}")
-    ax.errorbar(erasure_rate, generalized_peeling_stats["ler"], generalized_peeling_stats["ler_eb"], label="generalized")
-    ax.errorbar(erasure_rate, peeling_results["mean"], 1.96*peeling_results["std"]/np.sqrt(1e3), label="peeling that works", linestyle='--')
+    ax.set_xlim([0.25, 0.40])
+
+    ax.errorbar(erasure_rate, ML_stats["ler"], ML_stats["ler_eb"], label="ML")
+    # ax.errorbar(erasure_rate, normal_peeling_stats["ler"], normal_peeling_stats["ler_eb"], label="normal")
+    # for d, stats in pruning_stats.items():
+    #     ax.errorbar(erasure_rate, stats["ler"], stats["ler_eb"], label=f"pruning depth={d}")
+    # ax.errorbar(erasure_rate, generalized_peeling_stats["ler"], generalized_peeling_stats["ler_eb"], label="generalized")
+    for g, stats in branching_stats.items():
+        ax.errorbar(erasure_rate, stats["ler"], stats["ler_eb"], label=f"branching {g} guesses")
+        
     plt.legend()
     plt.show()
-    
+
+    fig, ax = plt.subplots(1, 1, figsize=(8, 5))
+    ax.set_title("Avg. SS size when decoder fails and ML succeeds")
+    ax.grid('minor')
+    # ax.plot(erasure_rate, new_tanner_hgp.avg_SS_size_by_er["peel"], '-o', label="peeling")
+    # ax.plot(erasure_rate, new_tanner_hgp.avg_SS_size_by_er["prun"], '-o', label=f"pruning")
+    # ax.plot(erasure_rate, new_tanner_hgp.avg_SS_size_by_er["gen peel"], '-o', label="gen peeling")
+    for i in range(7):
+        ax.plot(erasure_rate, new_tanner_hgp.avg_SS_size_by_er["branch"][:, i], '-o', label=f"branching G={i}")
+
+    # ax.set_xlim([0.30, 0.35])
+    # ax.set_ylim([0, 20])
+
+    plt.legend()
+    plt.show()
 

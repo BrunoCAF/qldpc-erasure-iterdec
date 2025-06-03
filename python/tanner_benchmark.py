@@ -56,21 +56,19 @@ def tanner_code_K8_Hamming(order_assignment: list[list[int]]) -> sp.csr_array:
     return sp.csr_array(sp.bsr_array((data, indices, indptr)).todense())
 
 
-p_vals = np.linspace(0.1, 0.5, 15)
+p_vals = np.linspace(0.15, 0.45, 10)
 MC_budget = {
     "peel": {
-        0: [int(1e6), int(5e5), int(1e5), int(1e4), int(5e3)]+[int(1e3)]*10, 
-        1: [int(1e6), int(5e5), int(1e5), int(1e4), int(5e3)]+[int(1e3)]*10, 
-        2: [int(1e6), int(1e5), int(1e5), int(1e4), int(5e3)]+[int(1e3)]*10, 
+        0: [int(1e5)]*5 + [int(1e5), int(1e5), int(1e5), int(1e4), int(1e4)], 
+        1: [int(1e5)]+[int(1e5)]*3+[int(1e4)]*3+[int(1e3)]*3, 
+        # 2: [int(1e6), int(1e5), int(1e5), int(1e4), int(5e3)]+[int(1e3)]*5+[int(5e2)]*5, 
     }, 
     "ML": {
-        0: [int(1e3)]*6 + [int(1e6), int(5e5), int(5e5), int(5e5), int(1e5), int(1e4), int(1e4), int(1e3), int(1e3)], 
-        1: [int(1e6), int(1e6), int(1e6)]+[int(1e5)]*3+[int(1e4)]*3+[int(1e3)]*6, 
-        2: [int(1e5)]*2+[int(1e4)]*3+[int(1e3)]*10,
+        0: [int(1e6)]*5 + [int(5e5), int(5e5), int(1e5), int(1e4), int(1e4)], 
+        1: [int(1e6)]+[int(1e5)]*3+[int(1e4)]*3+[int(1e3)]*3, 
+        # 2: [int(1e5)]*2+[int(1e4)]*3+[int(1e3)]*10,
     }
 }
-
-decoders = []
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -93,27 +91,34 @@ if __name__ == '__main__':
     code = tanner_code_K8_Hamming(order_assignment_list[C%3])
     if C // 3 == 1:
         code = sp.csr_array((code.T @ code).todense() & 1)
-    n, k, d, (s, _, _) = code.shape[1], code_dimension(code), code_distance(code), smallest_SS_weight(code)
-    nt, kt, dt, (st, _, _) = code.shape[0], code_dimension(code.T), code_distance(code.T), smallest_SS_weight(code.T)
-    print(f'Classical (base) code params: [{n=}, {k=}, {d=}, {s=}], [n^t={nt}, k^t={kt}, d^t={dt}, s^t={st}]')    
-    print(f'Quantum HGP code params: [[N={n*n+nt*nt}, K={k*k+kt*kt}, D={min(d, dt)}]]')
-    params = {
-        'n': n, 'k': k, 'd': d, 's': s, 
-        'nt': nt, 'kt': kt, 'dt': dt, 'st': st, 
-        'N': n*n+nt*nt, 'K': k*k+kt*kt, 'D': min(d, dt), 
-    }
+    
+    if E == 0 and D == 0:
+        n, k, d, (s, _, _) = code.shape[1], code_dimension(code), code_distance(code), smallest_SS_weight(code)
+        nt, kt, dt, (st, _, _) = code.shape[0], code_dimension(code.T), code_distance(code.T), smallest_SS_weight(code.T)
+        print(f'Classical (base) code params: [{n=}, {k=}, {d=}, {s=}], [n^t={nt}, k^t={kt}, d^t={dt}, s^t={st}]')    
+        print(f'Quantum HGP code params: [[N={n*n+nt*nt}, K={k*k+kt*kt}, D={min(d, dt)}]]')
+        params = {
+            'n': n, 'k': k, 'd': d, 's': s, 
+            'nt': nt, 'kt': kt, 'dt': dt, 'st': st, 
+            'N': n*n+nt*nt, 'K': k*k+kt*kt, 'D': min(d, dt), 
+        }
+    else:
+        n, k, d = code.shape[1], code_dimension(code), code_distance(code)
+        print('For code params, check output of the script with E=0')
+        params = {}
 
     # Set simulation parameters
     er = p_vals[E]
     print(f'Error rate: {er:.3f} | MC budget (ML): 10^{np.log10(MC_ML):.0f} trials; (peel): 10^{np.log10(MC_peel):.0f} trials')
 
     # Set decoder/cost function -> do both ML and peeling
-    theta = bpt.from_biadjacency_matrix(code, create_using=nx.MultiGraph)
-    print('Running ML decoding benchmark...')    
-    t0 = time.time()
-    ML_results = MC_erasure_plog(MC_ML, state=theta, p_vals=[er])
-    dt = time.time() - t0
-    print(f'ML done in {dt:.3f} s')
+    if D == 0:
+        theta = bpt.from_biadjacency_matrix(code, create_using=nx.MultiGraph)
+        print('Running ML decoding benchmark...')    
+        t0 = time.time()
+        ML_results = MC_erasure_plog(MC_ML, state=theta, p_vals=[er])
+        dt = time.time() - t0
+        print(f'ML done in {dt:.3f} s')
 
     if C // 3 == 0:
         tanner_code_classic = TannerCode.from_standard_code(code, [3*k + np.arange(3) for k in range(8)])
@@ -123,9 +128,12 @@ if __name__ == '__main__':
     tanner_code_hgp = TannerCodeHGP(tanner_code_classic)
     print('Running peeling decoding benchmark...')
     t0 = time.time()
-    # peeling_results = MC_peeling_HGP(MC_peel, state=theta, p_vals=[er])
-    normal_peeling_stats, pruning_stats, generalized_peeling_stats = tanner_code_hgp.gen_peel_benchmark([er], pruning_depth=2,
-                                                                                                        max_num_trials=MC_peel)
+    
+    # normal_peeling_stats, pruning_stats, generalized_peeling_stats = tanner_code_hgp.gen_peel_benchmark([er], pruning_depth=2,
+    #                                                                                                     max_num_trials=MC_peel)
+    _, branching_stats = tanner_code_hgp.peel_guess_benchmark([er], max_num_trials=MC_peel, pruning_depth=D)
+    
+    
     dt = time.time() - t0
     print(f'Peeling done in {dt:.3f} s')
     print(f'{tanner_code_hgp.min_SS_size = }')
@@ -140,31 +148,42 @@ if __name__ == '__main__':
             grp.attrs[str(par)] = val
 
         # Store min SS params for each decoder layer
-        if "minSS_peel" in grp.attrs:
-            grp.attrs["minSS_peel"] = min(grp.attrs["minSS_peel"], tanner_code_hgp.min_SS_size["peel"])
-        else:
-            grp.attrs["minSS_peel"] = tanner_code_hgp.min_SS_size["peel"]
-        for d, s in enumerate(tanner_code_hgp.min_SS_size["prun"]):
-            grp.attrs[f"minSS_prun_d={d+1}"] = min(grp.attrs[f"minSS_prun_d={d+1}"], s) if f"minSS_prun_d={d+1}" in grp.attrs else s
-        if "minSS_gen_peel" in grp.attrs:
-            grp.attrs["minSS_gen_peel"] = min(grp.attrs["minSS_gen_peel"], tanner_code_hgp.min_SS_size["gen peel"])
-        else:
-            grp.attrs["minSS_gen_peel"] = tanner_code_hgp.min_SS_size["gen peel"]
-
+        # if "minSS_peel" in grp.attrs:
+        #     grp.attrs["minSS_peel"] = min(grp.attrs["minSS_peel"], tanner_code_hgp.min_SS_size["peel"])
+        # else:
+        #     grp.attrs["minSS_peel"] = tanner_code_hgp.min_SS_size["peel"]
+        # for d, s in enumerate(tanner_code_hgp.min_SS_size["prun"]):
+        #     grp.attrs[f"minSS_prun_d={d+1}"] = min(grp.attrs[f"minSS_prun_d={d+1}"], s) if f"minSS_prun_d={d+1}" in grp.attrs else s
+        # if "minSS_gen_peel" in grp.attrs:
+        #     grp.attrs["minSS_gen_peel"] = min(grp.attrs["minSS_gen_peel"], tanner_code_hgp.min_SS_size["gen peel"])
+        # else:
+        #     grp.attrs["minSS_gen_peel"] = tanner_code_hgp.min_SS_size["gen peel"]
+        for g, s in enumerate(tanner_code_hgp.min_SS_size["branch"]):
+            grp.attrs[f"minSS_branch_d={D}_g={g}"] = min(grp.attrs[f"minSS_branch_d={D}_g={g}"], s) if f"minSS_branch_d={D}_g={g}" in grp.attrs else s
+        
         subgrp = grp.require_group(f'ER={E}')
         
         # Store LER statistics for each decoder
-        subgrp.create_dataset("ML_ler", data=ML_results['mean'])
-        subgrp.create_dataset("ML_eb", data=1.96*ML_results['std']/np.sqrt(MC_ML))
+        if D == 0:
+            subgrp.create_dataset("ML_ler", data=ML_results['mean'])
+            subgrp.create_dataset("ML_eb", data=1.96*ML_results['std']/np.sqrt(MC_ML))
 
-        subgrp.create_dataset("normal_peel_ler", data=normal_peeling_stats['ler'])
-        subgrp.create_dataset("normal_peel_eb", data=normal_peeling_stats['ler_eb'])
+        # subgrp.create_dataset("normal_peel_ler", data=normal_peeling_stats['ler'])
+        # subgrp.create_dataset("normal_peel_eb", data=normal_peeling_stats['ler_eb'])
 
-        for d, pruning_stats_d in pruning_stats.items():
-            subgrp.create_dataset(f"prun_d{d}_ler", data=pruning_stats_d['ler'])
-            subgrp.create_dataset(f"prun_d{d}_eb", data=pruning_stats_d['ler_eb'])
+        # for d, pruning_stats_d in pruning_stats.items():
+        #     subgrp.create_dataset(f"prun_d{d}_ler", data=pruning_stats_d['ler'])
+        #     subgrp.create_dataset(f"prun_d{d}_eb", data=pruning_stats_d['ler_eb'])
 
-        subgrp.create_dataset("gen_peel_ler", data=generalized_peeling_stats['ler'])
-        subgrp.create_dataset("gen_peel_eb", data=generalized_peeling_stats['ler_eb'])
+        # subgrp.create_dataset("gen_peel_ler", data=generalized_peeling_stats['ler'])
+        # subgrp.create_dataset("gen_peel_eb", data=generalized_peeling_stats['ler_eb'])
+
+        for g, branching_stats_g in branching_stats.items():
+            subgrp.create_dataset(f"branching_d{D}_g{g}_ler", data=branching_stats_g['ler'])
+            subgrp.create_dataset(f"branching_d{D}_g{g}_eb", data=branching_stats_g['ler_eb'])
+
+        # TODO: Store SS size statistics for each decoder
+        subgrp.create_dataset(f"avgSS_branch_d={D}", data=tanner_code_hgp.avg_SS_size_by_er["branch"].flatten())
+        
     
     print('Results saved. All done.')
