@@ -20,7 +20,7 @@ for name in names:
     with open(name+'.pkl', 'rb') as f:
         objs.append(pickle.load(f))
 
-codes = ['[625,25]', '[1225,62]', '[1600,64]', '[2025,81]']
+codes = ['[625,25]', '[1225,65]', '[1600,64]', '[2025,81]']
 
 
 p_vals = np.linspace(0.10, 0.3, 10)
@@ -28,14 +28,12 @@ MC_budget = {
     "peel": {
         0: [int(1e5)]*2 + [int(1e5)]*3 + [int(1e4)]*5, 
         1: [int(1e5)]*2 + [int(1e5)]*3 + [int(1e4)]*5, 
-        2: [int(1e5)]*2 + [int(1e5)]*3 + [int(1e4)]*5, 
-        3: [int(1e3)]*2 + [int(1e5)]*3 + [int(1e5)]*5, 
+        2: [int(1e3)]*2 + [int(1e5)]*3 + [int(1e5)]*5, 
     }, 
     "ML": {
         0: [int(1e6)]*2 + [int(1e5)]*3 + [int(1e4)]*5, 
         1: [int(1e6)]*2 + [int(1e5)]*3 + [int(1e4)]*5, 
-        2: [int(1e6)]*2 + [int(1e5)]*3 + [int(1e4)]*5, 
-        3: [int(1e3)]*2 + [int(1e6)]*3 + [int(1e5)]*5, 
+        2: [int(1e3)]*2 + [int(1e6)]*3 + [int(1e5)]*5, 
     }
 }
 
