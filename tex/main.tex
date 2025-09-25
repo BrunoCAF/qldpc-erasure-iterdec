@@ -1,0 +1,225 @@
+\documentclass{article}
+
+\usepackage[cmex10]{amsmath}
+\usepackage{mathtools}
+\usepackage{amsfonts}
+\usepackage{amssymb,mathrsfs}
+\usepackage{physics}
+\usepackage{stmaryrd}
+
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{graphicx} % Required for inserting images
+\usepackage{xcolor}
+\usepackage[sorting=none]{biblatex}
+\usepackage{hyperref}
+\usepackage{diagbox}
+\addbibresource{biblio.bib}
+
+\usepackage{standalone}
+\usepackage{tikz}
+\usetikzlibrary{external}
+\tikzexternalize
+\usetikzlibrary{arrows.meta,arrows,angles,quantikz2,backgrounds} 
+
+\newcommand*{\vertbar}{\rule[-1ex]{0.5pt}{2.5ex}}
+\newcommand*{\horzbar}{\rule[.5ex]{2.5ex}{0.5pt}}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}
+\DeclareMathOperator{\im}{im}
+\DeclareMathOperator{\Span}{span}
+\newcommand\floor[1]{\left\lfloor#1\right\rfloor}
+\newcommand\ceil[1]{\left\lceil#1\right\rceil}
+\DeclareMathOperator{\lcm}{lcm}
+\DeclareMathOperator\supp{supp}
+
+\usepackage{algorithm}
+\usepackage{algorithmic}
+
+\renewcommand{\algorithmicrequire}{\textbf{Input:}}
+\renewcommand{\algorithmicensure}{\textbf{Output:}}
+
+\title{PhD Literature Reviews}
+\author{Bruno Costa Alves Freire}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+
+This document is meant to assemble drafts of literature review notes. 
+
+\subsection{Target literature}
+\subsubsection{PhD topic specific reading list reading}
+\begin{itemize}
+    \item (\ref{mctbook_subsec}) \cite{moderncodingtheory} \href{https://www.karlin.mff.cuni.cz/~holub/soubory/ModernCodingTheory.pdf}{Modern Coding Theory}
+    \item (\ref{efficienterasure}) \cite{efficienterasure} \href{https://www.cs.yale.edu/homes/spielman/PAPERS/eraseIT.pdf}{Efficient Erasure Correcting Codes}
+    \item (\ref{HGP_subsec}) \cite{Tillich_2014} \href{https://arxiv.org/pdf/0903.0566}{Quantum LDPC codes with positive rate and minimum distance proportional to $n^{1/2}$}
+    \item (\ref{decoding_qLDPC_subsec}) \cite{Roffe_2020} \href{https://arxiv.org/pdf/2005.07016}{Decoding Across the Quantum LDPC Code Landscape} 
+    \item () \cite{Connolly_2024} \href{https://arxiv.org/pdf/2208.01002}{Fast erasure decoder for hypergraph product codes}
+    \item (\ref{liftedproduct_subsec}) \cite{panteleev2022asymptoticallygoodquantumlocally} \href{https://arxiv.org/pdf/2111.03654}{Asymptotically Good Quantum and Locally Testable Classical LDPC Codes} 
+    \item () \cite{leverrier2022quantumtannercodes} \href{https://arxiv.org/pdf/2202.13641}{Quantum Tanner codes}
+    \item () \cite{Leverrier_2015} \href{https://arxiv.org/pdf/1504.00822}{Quantum Expander Codes} 
+    \item () \cite{Grospellier_2021} \href{https://arxiv.org/pdf/2004.11199}{Combining hard and soft decoders for hypergraph product codes}
+    \item () \cite{meister2024efficientsoftoutputdecoderssurface} \href{https://arxiv.org/pdf/2405.07433}{Efficient soft-output decoders for the surface code}
+    \item () \cite{sabo2024weightreducedstabilizercodes} \href{https://arxiv.org/pdf/2402.05228}{Weight Reduced Stabilizer Codes with Lower Overhead}
+    \item () \cite{scruby2024highthresholdlowoverheadsingleshotdecodable} \href{https://arxiv.org/pdf/2406.14445}{High-threshold, low-overhead and single-shot decodable fault-tolerant quantum memory}
+    \item () \cite{wolanski2024ambiguityclusteringaccurateefficient} \href{https://arxiv.org/pdf/2406.14527}{Ambiguity Clustering: an accurate and efficient decoder for qLDPC codes}
+    \item () \cite{poulin2008iterativedecodingsparsequantum} \href{https://arxiv.org/pdf/0801.1241}{On the iterative decoding of sparse quantum codes}
+    \item () \cite{zhu2025topologicaltheoryqldpcnonclifford} \href{https://arxiv.org/abs/2501.19375}{A topological theory for qLDPC: non-Clifford gates and magic state fountain on homological product codes with constant rate and beyond the $N^{1/3}$ distance barrier}
+    \item () \cite{berardini2024asymptoticallygoodcsstcodes} \href{https://www.arxiv.org/abs/2412.08586}{Asymptotically good CSS-T codes exist}
+    \item () \cite{malcolm2025computingefficientlyqldpccodes} \href{https://arxiv.org/abs/2502.07150}{Computing Efficiently in QLDPC Codes}
+    \item () \cite{tanner1981recursiveapproachlowcomplexitycodes} \href{https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=1056404&tag=1}{A recursive approach to low complexity codes}
+    
+\end{itemize}
+
+
+\subsubsection{General FTQC literacy}
+\begin{itemize}
+    \item () \cite{Shor95} \href{https://www.cs.miami.edu/home/burt/learning/Csc670.052/pR2493_1.pdf}{Scheme for reducing decoherence in quantum computer memory}
+    \item () \cite{Steane1996ErrorCC} \href{https://users.physics.ox.ac.uk/~Steane/pubs/Steane_PRL95.pdf}{Error Correcting Codes in Quantum Theory}
+    \item () \cite{gottesman1997stabilizercodesquantumerror} \href{https://arxiv.org/pdf/quant-ph/9705052}{Stabilizer Codes and Quantum Error Correction}
+    \item () \cite{Dennis_2002} \href{https://arxiv.org/pdf/quant-ph/0110143}{Topological quantum memory} 
+    \item () \cite{Fowler_2012} \href{https://arxiv.org/pdf/1208.0928}{Surface codes: Towards practical large-scale quantum computation}
+    \item () \cite{higgott2023sparseblossomcorrectingmillion} \href{https://arxiv.org/pdf/2303.15933}{Sparse Blossom: correcting a million errors per core second with minimum-weight matching}
+    \item () \cite{patra2024targetedcliffordlogicalgates} \href{https://arxiv.org/pdf/2411.17050}{Targeted Clifford logical gates for hypergraph product codes}
+\end{itemize}
+
+
+\subsubsection{Notes from NISQ2LSQ workshop in Marseille 22-24/01/2025}
+\begin{itemize}
+    \item Nicolas SAUSSAY : A variant of the Bravyi-Terhal bound for arbitrary boundary conditions. (\ref{saussay_sssec} for notes);
+    \item Wouter ROZENDAAL : An upper bound on the minimum distance of Abelian two-block group algebra codes. (\ref{rozendaal_sssec} for notes);
+    \item Thomas VAN HIMBEECK : Can we achieve the hashing bound with small weight quantum codes? (\ref{vanhimbeeck_sssec} for notes);
+    \item Clément POIRSON : Engineering CSS surgery to perform logical free phase ZX-diagrams. (\ref{poirson_sssec} for notes);
+    \item Paul HILAIRE : Tailoring QEC codes to a photonic FTQC architecture. (\ref{hilaire_sssec} for notes);
+    \item Mike VASMER : Single-shot and measurement-based quantum error correction via fault complexes. (\ref{vasmer_sssec} for notes);
+    \item Samuel NOVAK : Basics of rotors: what is it, and why is it $\mathbb{Z}$? (\ref{novak_sssec} for notes);
+    \item Christophe VUILLOT : Tiger codes. (\ref{vuillot_sssec} for notes);
+    \item Gilles ZEMOR : Protecting Clifford circuits with rank-metric techniques. (\ref{zemor_sssec} for notes);
+    \item Virgile GUEMARD : Moderate length quantum Tanner codes. (\ref{guemard_sssec} for notes);
+\end{itemize}
+
+\subsubsection{On the decoding vs. decoder benchmarking for quantum erasure channels question}
+
+When actually decoding an erasure, in the classical case, one needs to output a codeword (or the completion of it) in function of the non-erased part of the received message. In the quantum case, the output should be a correction to be applied on the qubits, that must be compatible with a measured syndrome, and restricted to the support of the erasure. In both cases, if the decoder is not allowed to give up (signal failure), it is responsible for outputting something, that is, it should either be sure that there is a unique answer, or guess one among the equally likely possibilities. The point here is, for an actual decoder, this output depends (even if in a simple way) on something more than just the erased subset (the non-erased bits in the classical case, the measured syndromes in the quantum case). However, if we are interested solely in measuring the failure probability of the decoder (assuming it fails whenever it's not sure of the output), i.e., benchmarking it, we don't really need any information apart from the erasure subset. 
+
+This fact is simple enough in the classical case (cf. Richardson \& Urbanke section 3.6.1). In the quantum case, let us provide a clearer argument as to why this is also true. Let $H_X, H_Z \in \mathbb{F}_2^{R\times N}$ define a CSS code $\mathcal{Q}$ (for simplicity, the same would work for any stabilizer code), let $\mathcal{E} \subset [N]$ be the erasure subset, and $E \le \mathcal{E}$ is the error pattern resulting from the syndrome measurement (that is, if the initial state was $\ket{\psi} \in \mathcal{Q}$, the state after the syndrome measurement is $E \ket{\psi}$). For simplicity, we'll refer to the $X/Z$ component of $E$ with the same notation, meaning $E \in \mathbb{F}_2^N$ and $\supp{E} \subset \mathcal{E}$. Let $\sigma_{Z/X} = H_{Z/X} E$ denote the syndrome measured at the $Z/X$ stabilizers (capturing the $X/Z$ component of $E$, resp.). 
+
+Define $\mathcal{C}(\mathcal{E}, \sigma) := \{E \in \eval{\mathbb{F}_2^N}_{\mathcal{E}} : \eval{H_Z}_{\mathcal{E}} E = \sigma\}$ as the set of corrections that are compatible with the syndrome $\sigma$ and supported inside the erasure $\mathcal{E}$. Notice that $\mathcal{C}(\mathcal{E}, \sigma)$ is a vector subspace of $\eval{\mathbb{F}_2^N}_{\mathcal{E}}$. Moreover, let $\mathcal{S}_X = \im{H_X^T} = \ker{\eta(H_X^T)} \subset \mathbb{F}_2^N$ denote the group of $X$-type stabilizers, also seen as a subspace of $\mathbb{F}_2^N$, and its restriction $\eval{\mathcal{S}_X}_{\mathcal{E}} := \{ \eval{S}_{\mathcal{E}} : S \in \mathcal{S}_X, \supp{S} \subset \mathcal{E} \} = \ker \eval{\eta(H_X^T)}_{\mathcal{E}}$ formed by the stabilizers that are supported in the erasure. 
+
+The correctability condition of the erasure $\mathcal{E}$ is given by
+$$
+\mathcal{E} \text{ is correctable } \iff \dfrac{\mathcal{C}(\mathcal{E}, \sigma)}{\eval{\mathcal{S}_X}_{\mathcal{E}}} \cong \{\overline{0}\},
+$$
+that is, when we quotient the subspace of compatible corrections by the stabilizer group, we should have only one equivalence class, otherwise, there will be logical errors hiding in the erasure. What we claim here is that, for all possible syndromes $\sigma$, we'll have $\# \dfrac{\mathcal{C}(\mathcal{E}, \sigma)}{\eval{\mathcal{S}_X}_{\mathcal{E}}} = \# \dfrac{\mathcal{C}(\mathcal{E}, 0)}{\eval{\mathcal{S}_X}_{\mathcal{E}}}$, which will in turn imply that the correctability condition is independent of the particular syndrome. 
+
+To prove this, we'll first assume that the syndrome $\sigma$ is caused by an error supported in the erasure, i.e., $\exists E \in \mathbb{F}_2^N$ s.t. $H_Z E = \sigma$ and $\supp E \subset \mathcal{E}$. That implies that $\mathcal{C}(\mathcal{E}, \sigma) \neq \varnothing$. Thus, let $\overline{C} \in \dfrac{\mathcal{C}(\mathcal{E}, \sigma)}{\eval{\mathcal{S}_X}_{\mathcal{E}}}$, meaning $\overline{C} = C + \eval{\mathcal{S}_X}_{\mathcal{E}}$, $C \le \mathcal{E}$ and $\eval{H_Z}_{\mathcal{E}} C = \sigma$. It is then easy to see that $\dfrac{\mathcal{C}(\mathcal{E}, \sigma)}{\eval{\mathcal{S}_X}_{\mathcal{E}}} = \dfrac{\mathcal{C}(\mathcal{E}, 0)}{\eval{\mathcal{S}_X}_{\mathcal{E}}} + \overline{C}$. 
+
+That proves that the correctability condition is independent on the syndrome, which means that the performance of the maximum likelihood decoder can be assessed with random erasure samples assuming only trivial syndrome. The same can be said for other decoders such as peeling and its variants, to the extend that their progression is not impacted by the particular value of the syndrome. In the following, let us analyze in more detail the operation of peeling, pruned peeling and branching to further convince ourselves of this fact. 
+
+{\color{red} Analyze the progression of peeling}
+
+\subsubsection{Conjectures about the capabilities of branching vs. peeling and ML}
+
+\begin{enumerate}
+    \item At the asymptotic regime ($p \rightarrow 0$), the branching algorithm can match ML's performance if the number of available guesses $g$ is at least $d - s$, where $d$ is the code distance and $s$ is the stopping distance. 
+\end{enumerate}
+
+Handwavy argument: For an erasure rate of $p$, the logical error rate is given by $\sum_{\mathcal{E} \subset [N]} p^{\abs{\mathcal{E}}}(1-p)^{N - \abs{\mathcal{E}}} \cdot [\mathcal{E} \text{ leads to a decoding failure}]$. Consider $\mathcal{E}$ such that $\abs{\mathcal{E}} < d$. That implies that, for this instance of erasure error, the ML algorithm would succeed, i.e., $\mathcal{E}$ cannot contain a nontrivial logical operator. Under this assumption, the branching algorithm should only fail if it runs out of guesses before peeling $\mathcal{E}$ completely. Now, we know that for any erasure $\mathcal{E}'$ with $\abs{\mathcal{E}'} < s$ (the stopping distance), the peeling algorithm is able to completely peel off $\mathcal{E}'$ and thus succeed. Since we assume that branching has at least $g = d-s$ guesses to spare, and it starts with an erasure pattern $\mathcal{E}$ of size $\mathcal{E} < d$, in the worst-case scenario peeling will block and trigger the branching mechanism as long as we have guesses left. However, after $d-s$ guesses, the size of the residual erasure will be less than $d - (d-s) = s$, and so it cannot still be a stopping set. That is, after at most $d-s$ guesses, the residual erasure gets too small to stop peeling from proceeding until the end. Thus, we get to the end with some number of branches (which may or may not have been cut along the execution), which we know must be all valid (that is, syndrome compliant and contained in the original erasure) and stabilizer-equivalent. To see why the remaining branches must be valid, just recall that branching has a consistency-check mechanism every time if finds a parity-check equation that had become dangling but whose dangling bit has been unerased before it was evaluated. Whenever these so-called empty equations are evaluated, they catch any branches that cause an inconsistency for it and trigger their cutting. Finally, to see why all the branches must be stabilizer-equivalent, just recall that, since $\abs{\mathcal{E}} < d$, it cannot contain a nontrivial logical operator, and thus, all syndrome and erasure-compliant corrections must be stabilizer-equivalent. This way, we have that, for all $\mathcal{E}$ such that $\abs{\mathcal{E}} < d$, $[\mathcal{E} \text{ leads to a decoding failure}] = 0$, and thus 
+
+$$p_L = \sum_{\abs{\mathcal{E}} \ge d} p^{\abs{\mathcal{E}}}(1-p)^{N - \abs{\mathcal{E}}} \cdot [\mathcal{E} \text{ leads to a decoding failure}] = O(p^d). $$
+
+Now, notice that the above argument gives us the same decay exponent $d$ as for the ML algorithm, but we can't say the same about the constant, that is, how many erasure patterns $\mathcal{E}$ of size $d$ will lead to a decoding failure for branching? Certainly at least as many as for ML, but could there be erasure patterns of size $d$ for which ML succeeds and branching still fails even with $g = d-s$ guesses? Possibly yes. Nothing rules out the existence of $d$-sized erasure patterns that don't cover logical operators, but that contain $s$-sized stopping sets. To get rid of those, it suffices to add just one more guess, so $g \ge d-s+1$ would be enough to match ML's asymptotic performance in both exponent and constant factor. It's good to highlight that it does not mean that the logical error rate for both algorithms will be exactly the same, because we can still have very large erasure patterns for which ML succeeds, but that block peeling sufficiently many times to exhaust all guesses lead to branching failure. However, those large patterns will have a negligible contribution to the logical error rate as $p \rightarrow 0$, in comparison to the others. 
+
+
+
+
+
+\subsubsection{On the difference between \textit{in silico} simulations vs. experimental determinations of logical error rates}
+
+So far, whenever I did simulations of the performance of codes, be it for the erasure channel or Pauli channels, for whatever decoder, the overall pipeline was simple: first, I sample some error pattern (Pauli string or erasure subset), compute the syndromes from it (I always assumed perfect measurements, but I could also include measurement error without changing much the pipeline), decode the syndrome/erasure (if solely for benchmarking purposes, I could just check whether the decoder is successful or not, not necessarily computing its output) and finally checking whether the predicted error/correction successfully brings the system back to the correct codestate. In all this procedure, not only are the simulations independent of the initial codestate (they don't affect any aspect of the decoding and assessment of correctness of the decoder's output), but they are also independent of data qubit measurements. The problem is, by keeping track of the physical error that affects the data (and eventually also the ancilla) qubits, I was doing something that is not compatible with an experimental setup. In experiments, we can only have access to information that we measure, and thus the whole benchmarking pipeline I described is impossible. 
+
+How then can we measure the performance of a code/decoder? How can we tell whether the decoder's correction brings us back to the initial codestate? In the \textit{in silico} simulations, the criterion was basically that the \textit{residual error} (that is, physical error minus decoder's correction) should be a stabilizer. That means we should make sure to return to the codespace (which is guaranteed in the absence of measurement error), and furthermore return to the same codestate as before. Well, the residual error is not accessible in the experimental setup. Moreover, since the measurements are noisy, and assuming that the decoder operates only with input from ancilla measurements, we don't have a guarantee of returning to the codespace. For the purpose of benchmarking the code/decoder in a memory experiment, we can allow ourselves to measure the data qubits at the end (but not feed them to the decoder), so we need to somehow extract (measure) information about this residual error from the data qubits. 
+
+It is easy to see that, if the residual error is not a stabilizer, it may flip some of the stabilizers (in which case it takes us out of the codespace), or, if it doesn't, then it is a (non trivial) logical operator, in which case it will flip some other logical operators, e.g., the $Z_L$ logical operator is flipped by $X_L$ or $Y_L$, assuming each of those act on the same logical qubit. If we assume that our logical qubit register is analogous to a physical register, and that each logical qubit undergoes, independently (or not?) some error channel (let's consider only Pauli channels at first), we could model the logical error channel as a Kraus map
+
+$$
+\mathcal{E}_L : \rho \mapsto (1-p_L) \rho + \sum\limits_{W\in \{X, Y, Z\}} p_{W, L} W_L \rho W_L, 
+$$
+and set out experiments to estimate the parameters $p_{W,L}$. Note, however, that the $W_L$ operators are only well defined if we assume that $\rho = \ketbra{\psi}$ is in the codespace, because they are in fact \textit{cosets} of operators by the stabilizer group. Should we include some probability of getting out of the codespace? In any case, how do we go about estimating those parameters?
+
+In the physical setting, what we do is quantum process tomography. If we had a physical Kraus map of the form $\mathcal{E}(\rho) = (1-p)\rho + p_X X\rho X + p_Y Y\rho Y + p_Z Z\rho Z$ (where $p = p_X+p_Y+p_Z$), we could estimate its parameters by looking at its action on a density operator $\rho = \frac{1}{2}(I + \vec{r}\cdot\vec{\sigma})$, 
+$$
+\mathcal{E}(\rho) = \dfrac{I + [(1-p) + p_X - p_Y - p_Z] r_X X + [\dots]}{2} = \dfrac{I + \sum_{W\in\{X,Y,Z\}} [1 - 2(p - p_W)] r_W W}{2}. 
+$$
+Define $s_W = 1 - 2(p-p_W)$ as the \textit{shrinking factor} in the $W$ axis, $W \in \{X, Y, Z\}$. The resulting density operator $\rho' = \mathcal{E}(\rho)$ is given by $\frac{1}{2}(I + \vec{r'}\cdot\vec{\sigma})$, where $\vec{r'}$ describes the position of the physical qubits in the Bloch sphere after undergoing the error channel $\mathcal{E}$. By preparing $\rho$ in different initial states and measuring $\rho'$ in different bases, we can estimate the shrinking factors $s_W$, and thus the Pauli error parameters $p_W$, with the following circuits:
+
+\begin{figure}[htb]
+    \centering
+    \includegraphics[width=0.7\textwidth]{tikz figures/qpt.pdf}
+\end{figure}
+
+By preparing the initial states so that we have $r_W = 1$, we measure $1$ (or $-1$ in the $+1/-1$ convention) in the corresponding basis with probability $\frac{1 - s_W}{2}$, which will give us a linear system that can be further solved for $p_W$. 
+
+We can think of doing a similar thing for logical qubits. Initialize the register in the logical $\ket{0}_L$, $\ket{+}_L$ or $\ket{+i}_L$ states, run some cycles of syndrome extraction followed by the application of the decoder's correction, and then measure the logical $Z_L$, $X_L$ or $Y_L$ operators. There are some problems here though. The logical operators have multiple representatives, and the measurements of those will not disagree if we are not in the codespace. 
+
+Questions:
+\begin{itemize}
+    \item When benchmarking codes/decoders experimentally, should we feed the decoder with data qubit measurements?
+    \item Assuming the decoder can't use data qubit measurements to compute the correction, we have no guarantee of returning to the codespace. Thus, different representatives of logical operators will disagree upon measurement. What should we measure then?
+    \item For general stabilizer codes, how do we go about measuring a logical observable from the data qubits? How many of such observables can we measure simultaneously (i.e., in the same shot)? Certainly at most $k$ (= $\#$ of logical qubits) since there are pairs of logical operators that anti-commute. 
+    \item How do we compatibilize the definition of logical error rate from the \textit{in silico} computations with the QPT approach described here? Keeping in mind that in the former definition, any nontrivial logical operator yields a logical error, but depending on the initial codestate, some nontrivial logical operators leave the state unchanged (e.g., if we are in the logical $\ket{0}_L$ state, the logical $Z_L$ operator doesn't amount to a logical error). That is, what the \textit{in silico} simulations compute is akin to $p_L = p_{X,L} + p_{Y,L} + p_{Z,L}$. What should we use as a figure of merit then?
+\end{itemize}
+
+
+
+
+
+
+\section{Short analyses and comments}
+
+\subsection{HGP codes} \label{HGP_subsec}
+
+Key paper by Tillich and Zémor, introduced the HGP code construction and changed the state-of-the-art of QEC codes in terms of the asymptotics of the minimum distance parameter (previous SOTA was $d = O(\log n)$, upgraded to $d = \Theta(\sqrt{n})$), for qLDPC codes with fixed rate (i.e., $k = \Theta(n)$). The paper presents the HGP construction and draws connections with related concepts, such as hypergraphs, explains how the HGP codes generalize toric codes, and proves the asymptotic properties of HGP codes. The main advantage of this construction is it's capability of creating CSS codes from any two classical codes, while preserving the LDPC property. 
+
+\subsubsection{Further reflections and remarks}
+
+During the internship we overlooked a problem related to the code with parameters $\llbracket1225, 65\rrbracket$. The classical code used to produce this HGP has $m = 21$ equations and $n = 28$ bits, but it's parity-check matrix has rank only $20$, so the transpose code is nontrivial, which is why we can even get an HGP code whose dimension is not a perfect square to begin with. The problem is, as we deform the code to traverse the state space, the rank of the parity-check matrix may increase, leading to the reduction of the resulting HGP code's dimension. The lowest dimension we can get is for when the classical parity-check matrix is full-rank, which is the case for the other three families, hence why we overlooked this problem during our investigations and didn't bother checking for a decrease of the codes' dimension. 
+
+This sheds light on the fact that the HGP construction \textit{is not a function of the two classical codes}, but rather of their \textit{parity-check matrix / Tanner graph representations}. The same pair of classical codes can have different matrix and graphical representations, which yield effectively different HGP codes. Adding or suppressing redundant parity-check equations (rows in the matrix) doesn't change the underlying code, but adds or suppresses check nodes in the Tanner graph, all of which will directly reflect on number of physical qubits of the HGP code. Moreover, replacing equations by linear combinations of the others implies changing the connectivity structure of the Tanner graph, going as far as changing the number of edges and the degree distributions, so the LDPC property is also perturbed by this kind of change. From another point of view, the HGP construction depends on the transpose codes (or at least their matrices and graphs), so applying row equivalent transformations to $H$ translates into column equivalent transformations to $H^T$, which don't necessarily preserve the transpose code. So far, the only identified transformations that can be applied to matrices or graphs while preserving in some sense the HGP code are row/column permutations or graph isomorphisms. I wonder if the same could be said about any isometric isomorphisms (i.e., any invertible linear transformation that preserves the Hamming distance) of the classical code. 
+
+In sync with the discussion on \ref{mctbook_subsec}, the choice of the specific matrix or graph representation of the code may be irrelevant for ML decoding, but it becomes relevant for iterative decoding algorithms (possibly also for encoding?). For the HGP construction, regardless of the decoding approach, the code itself is different according to the matrix/graph representation choice of the classical codes. 
+
+
+\subsection{Decoding qLDPC codes} \label{decoding_qLDPC_subsec}
+
+This paper proposes a decoding strategy for HGP codes based on a combination of Belief Propagation (BP) and Order Statistics decoding (OSD). There is a github repo with the code available. 
+
+
+\subsection{Lifted product codes} \label{liftedproduct_subsec}
+
+Important paper by Panteleev and Kalachev, first to introduce asymptotically good quantum LDPC codes. Asymptotically good means that the codes have both linear dimension and minimum distance, $\llbracket n, k=\Theta(n), d=\Theta(n)\rrbracket$. The construction is based on an operation from homological algebra known as lifting, hence the name lifted product codes. 
+
+\subsection{}
+
+\section{In-depth reading}
+
+\input{in-depth reads/efficient erasure decoder}
+
+\input{in-depth reads/modern coding theory book}
+
+\newpage
+\input{in-depth reads/NISQ2LSQ Marseille workshop}
+
+
+\newpage
+\section{Material for peeling+guessing paper}
+\input{material for paper/peeling_guessing}
+
+
+\newpage
+\printbibliography
+
+\end{document}
