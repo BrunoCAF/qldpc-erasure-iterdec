@@ -154,16 +154,11 @@ filenames = lambda XZ, C: f'H{XZ}_k{2*(C+1)}.mtx'
 p_vals = np.linspace(0.05, 0.45, 15)
 MC_budget = {
     "peel": {
-        0: [int(1e5)]*3 + [int(1e5)]*5 + [int(1e4)]*7, 
-        1: [int(1e5)]*3 + [int(1e5)]*5 + [int(1e4)]*7, 
-        2: [int(1e5)]*3 + [int(1e5)]*5 + [int(1e4)]*7, 
-        3: [int(1e5)]*3 + [int(1e5)]*5 + [int(1e5)]*7, 
-        4: [int(1e5)]*3 + [int(1e6)]*5 + [int(1e5)]*7, 
-        5: [int(1e5)]*3 + [int(1e6)]*5 + [int(1e5)]*7, 
-        6: [int(1e5)]*3 + [int(1e6)]*5 + [int(1e5)]*7, 
+        0: [int(1e7)]*15,
+        1: [int(1e7)]*15,
+        2: [int(1e7)]*15,
     }, 
 }
-
 
 
 if __name__ == '__main__':
