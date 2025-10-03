@@ -148,7 +148,7 @@ def load_from_mtx(filename, path='../QT_codes/'):
     return sp.csr_array((data[:, 2], (data[:, 0], data[:, 1])), shape=(m, n))
 
 
-filenames = lambda XZ, C: f'H{XZ}_k{2*(C+1)}.mtx'
+filenames = lambda XZ, C: f'H{XZ}_k{2*(C+1)}_w8.mtx'
 
 # Tune the physical erasure rates and the MC budget according to the code/decoder
 p_vals = np.linspace(0.05, 0.45, 15)
@@ -180,10 +180,6 @@ if __name__ == '__main__':
     # Set code
     Hx = load_from_mtx(filenames('X', C))
     Hz = load_from_mtx(filenames('Z', C))
-
-    # Fix row weights
-    Hx[0::4, :] -= Hx[1::4, :]
-    Hz[0::4, :] -= Hz[1::4, :]
     
     # Compute code params
     assert Hx.shape[1] == Hz.shape[1]
