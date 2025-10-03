@@ -180,6 +180,10 @@ if __name__ == '__main__':
     # Set code
     Hx = load_from_mtx(filenames('X', C))
     Hz = load_from_mtx(filenames('Z', C))
+
+    # Fix row weights
+    Hx[0::4, :] -= Hx[1::4, :]
+    Hz[0::4, :] -= Hz[1::4, :]
     
     # Compute code params
     assert Hx.shape[1] == Hz.shape[1]
