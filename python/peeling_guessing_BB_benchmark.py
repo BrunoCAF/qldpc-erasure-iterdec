@@ -156,16 +156,16 @@ polys = [
 
 
 # Tune the physical erasure rates and the MC budget according to the code/decoder
-p_vals = np.linspace(0.1, 0.3, 10)
+p_vals = np.linspace(0.05, 0.45, 15)
 MC_budget = {
     "peel": {
-        0: [int(1e5)]*2 + [int(1e5)]*3 + [int(1e4)]*5, 
-        1: [int(1e5)]*2 + [int(1e5)]*3 + [int(1e4)]*5, 
-        2: [int(1e5)]*2 + [int(1e5)]*3 + [int(1e4)]*5, 
-        3: [int(1e3)]*2 + [int(1e5)]*3 + [int(1e5)]*5, 
-        4: [int(1e3)]*2 + [int(1e5)]*3 + [int(1e5)]*5, 
-        5: [int(1e3)]*2 + [int(1e5)]*3 + [int(1e5)]*5, 
-        6: [int(1e3)]*2 + [int(1e5)]*3 + [int(1e5)]*5, 
+        0: [int(1e5)]*3 + [int(1e5)]*5 + [int(1e4)]*7, 
+        1: [int(1e5)]*3 + [int(1e5)]*5 + [int(1e4)]*7, 
+        2: [int(1e5)]*3 + [int(1e5)]*5 + [int(1e4)]*7, 
+        3: [int(1e5)]*3 + [int(1e5)]*5 + [int(1e5)]*7, 
+        4: [int(1e5)]*3 + [int(1e6)]*5 + [int(1e5)]*7, 
+        5: [int(1e5)]*3 + [int(1e6)]*5 + [int(1e5)]*7, 
+        6: [int(1e5)]*3 + [int(1e6)]*5 + [int(1e5)]*7, 
     }, 
 }
 
@@ -226,7 +226,7 @@ if __name__ == '__main__':
         subgrp = grp.require_group(f'ER={E}')
         
         # Store LER statistics for each decoder
-        if D == 0:
+        if D == 1:
             subgrp.create_dataset("ML_ler", data=ML_stats['ler'])
             subgrp.create_dataset("ML_eb", data=ML_stats['ler_eb'])
 
