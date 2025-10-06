@@ -93,7 +93,7 @@ class PeelingGuessingBenchmark:
         for i, er in enumerate(p_vals):
             num_trials = max_num_trials
             self.avg_SS_size = self.avg_SS_size_by_er[i]
-            for t in (pbar := tqdm(range(max_num_trials))):
+            for t in (pbar := tqdm(range(max_num_trials), miniters=1e5, mininterval=1800, maxinterval=np.infty, disable=True)):
                 descr = f'#failures: Branching+Pruning(D={pruning_depth}) '
                 for g, branching_failures_g in branching_failures.items():
                     descr += f'G={g}: {branching_failures_g[i]:.0f} | '
@@ -122,7 +122,7 @@ class PeelingGuessingBenchmark:
                 for branching_failures_g, branching_success_g in zip(branching_failures.values(), branching_success):
                     branching_failures_g[i] += 1 if not branching_success_g else 0              
                 
-                if branching_failures[6][i] >= min_num_fails:
+                if ML_failures[i] >= min_num_fails:
                     num_trials = t+1
                     break
                         
