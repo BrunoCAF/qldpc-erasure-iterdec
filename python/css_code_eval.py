@@ -337,13 +337,13 @@ def peel_guess(erasure: np.ndarray, Hindptr: np.ndarray, Hindices: np.ndarray) -
 
 @numba.njit
 def smallest_connected_component(erasure: np.ndarray, 
-                                 erased_bits: np.ndarray, 
                                  reversed_erased_bits: np.ndarray, 
                                  bit_adj_lists: np.ndarray, 
                                  erased_bit_degrees: np.ndarray, 
                                  Hindices: np.ndarray, 
                                  Hindptr: np.ndarray) -> np.ndarray:
     # Keep track of the size of the smallest component, and the current component
+    erased_bits = np.nonzero(erasure)[0]
     smallest_component = erased_bits # initialize with the whole erasure as the CC
     current_component = np.zeros(len(erased_bits), dtype=np.int32)
     current_component_size, smallest_component_size = 0, len(erased_bits)
@@ -500,8 +500,8 @@ def peel_prune_guess(erasure: np.ndarray, Hindptr: np.ndarray, Hindices: np.ndar
             # If pruning is exhausted, resort to guessing (if available)
             if num_guesses < max_guesses:
                 # Guess score to choose the guessed bit;                 
-                # guess_candidates = np.nonzero(erasure)[0] # TODO: changer l'heuristique
-                guess_candidates = smallest_connected_component(erasure, erased_bits, reversed_erased_bits, bit_adj_lists, erased_bit_degrees, Hindices, Hindptr)
+                # guess_candidates = np.nonzero(erasure)[0]
+                guess_candidates = smallest_connected_component(erasure, reversed_erased_bits, bit_adj_lists, erased_bit_degrees, Hindices, Hindptr)
                 guess_score = np.zeros((len(guess_candidates),), dtype=np.int32)
                 for i, b in enumerate(guess_candidates):
                     rev_bit_idx = reversed_erased_bits[b]
@@ -509,6 +509,7 @@ def peel_prune_guess(erasure: np.ndarray, Hindptr: np.ndarray, Hindices: np.ndar
                         if check_erasure_degrees[check_idx] == 2:
                             guess_score[i] += 1
                 guess_bit = guess_candidates[np.argmax(guess_score)]
+                # guess_bit = npr.choice(guess_candidates)
 
                 # Guess the correction at guess_bit as being 1 and duplicate other values
                 # TODO: think of a more efficient way to do this duplication, i.e., duplicate only the nonempty bits/checks (sparse arrays)
