@@ -335,6 +335,59 @@ def peel_guess(erasure: np.ndarray, Hindptr: np.ndarray, Hindices: np.ndarray) -
     assert not np.any(erasure)
     return bit_correction, num_guesses, max_used_guesses, erasure_sizes
 
+@numba.njit
+def smallest_connected_component(erasure: np.ndarray, 
+                                 erased_bits: np.ndarray, 
+                                 reversed_erased_bits: np.ndarray, 
+                                 bit_adj_lists: np.ndarray, 
+                                 erased_bit_degrees: np.ndarray, 
+                                 Hindices: np.ndarray, 
+                                 Hindptr: np.ndarray) -> np.ndarray:
+    # Keep track of the size of the smallest component, and the current component
+    smallest_component = erased_bits # initialize with the whole erasure as the CC
+    current_component = np.zeros(len(erased_bits), dtype=np.int32)
+    current_component_size, smallest_component_size = 0, len(erased_bits)
+
+    # Start decomposing the erasure. Need to go all the way, and complete the description 
+    # of a component even if I already know it is larger than the minimum
+    unassigned_bits = np.ones_like(reversed_erased_bits) & erasure # to know of when the procedure is done, keep track of the bits still unassigned to a CC
+    unassigned_checks = np.ones(len(Hindptr)-1, dtype=np.int32) # keep track of the assignment of the checks as well to avoid traversing the same check twice
+    ub_ptr = 0
+    while np.count_nonzero(unassigned_bits) > 0:
+        # Pick some unassigned bit and start computing its CC
+        while unassigned_bits[erased_bits[ub_ptr]] == 0:
+            ub_ptr += 1
+        
+        # Have my unassigned bit, erased_bits[ub_ptr], now lets find its connected component
+        current_component[current_component_size] = erased_bits[ub_ptr]
+        current_component_size += 1
+        unassigned_bits[erased_bits[ub_ptr]] = 0 # mark this bit as assigned to a CC
+
+        cc_ptr = 0
+
+        # For each bit in the CC, we iterate over its neighbors and add them to the CC. Once you reach the last bit already added to the CC, you stop
+        while cc_ptr < current_component_size:
+            # Add everyone in the neighborhood of current_component[cc_ptr]
+            rev_bit_idx = reversed_erased_bits[current_component[cc_ptr]]
+            for check_idx in bit_adj_lists[rev_bit_idx][:erased_bit_degrees[rev_bit_idx]]:
+                if unassigned_checks[check_idx]: # skip checks that are already assigned
+                    unassigned_checks[check_idx] = 0 # mark check as assigned to a CC
+                    # Now loop over the neighboring bits
+                    for bit_idx in Hindices[Hindptr[check_idx]:Hindptr[check_idx+1]]:
+                        if unassigned_bits[bit_idx]: # bit must be previously unassigned and inside the erasure
+                            current_component[current_component_size] = bit_idx
+                            current_component_size += 1
+                            unassigned_bits[bit_idx] = 0 # add bit to the CC and mark it as assigned
+
+            cc_ptr += 1 # Move on to the next bit already added in the component
+
+        # If the loop ends, no one left to add in the CC, move to the next CC
+        # Check if it is the smallest so far
+        if current_component_size < smallest_component_size:
+            smallest_component_size = current_component_size
+            smallest_component[:smallest_component_size] = current_component[:current_component_size].copy()
+    
+    return smallest_component[:smallest_component_size]
 
 @numba.njit
 def peel_prune_guess(erasure: np.ndarray, Hindptr: np.ndarray, Hindices: np.ndarray, 
@@ -375,6 +428,7 @@ def peel_prune_guess(erasure: np.ndarray, Hindptr: np.ndarray, Hindices: np.ndar
     num_guesses = 0
     max_used_guesses = 0
     erasure_sizes = np.zeros(7, dtype=np.uint32)
+    # stopping_sets = np.zeros((7, len(erasure)), dtype=np.uint32)
     stopping_size = 0
     
     # Initialize bit correction and cumulative syndrome branches
@@ -445,14 +499,16 @@ def peel_prune_guess(erasure: np.ndarray, Hindptr: np.ndarray, Hindices: np.ndar
                 stopping_size = np.count_nonzero(erasure)
             # If pruning is exhausted, resort to guessing (if available)
             if num_guesses < max_guesses:
-                # Guess score to choose the guessed bit
-                guess_score = np.zeros((len(np.nonzero(erasure)[0]),), dtype=np.int32)
-                for i, b in enumerate(np.nonzero(erasure)[0]):
+                # Guess score to choose the guessed bit;                 
+                # guess_candidates = np.nonzero(erasure)[0] # TODO: changer l'heuristique
+                guess_candidates = smallest_connected_component(erasure, erased_bits, reversed_erased_bits, bit_adj_lists, erased_bit_degrees, Hindices, Hindptr)
+                guess_score = np.zeros((len(guess_candidates),), dtype=np.int32)
+                for i, b in enumerate(guess_candidates):
                     rev_bit_idx = reversed_erased_bits[b]
                     for check_idx in bit_adj_lists[rev_bit_idx]:
                         if check_erasure_degrees[check_idx] == 2:
                             guess_score[i] += 1
-                guess_bit = np.nonzero(erasure)[0][np.argmax(guess_score)]
+                guess_bit = guess_candidates[np.argmax(guess_score)]
 
                 # Guess the correction at guess_bit as being 1 and duplicate other values
                 # TODO: think of a more efficient way to do this duplication, i.e., duplicate only the nonempty bits/checks (sparse arrays)
@@ -464,6 +520,7 @@ def peel_prune_guess(erasure: np.ndarray, Hindptr: np.ndarray, Hindices: np.ndar
                 num_guesses += 1
                 if num_guesses > max_used_guesses:
                     erasure_sizes[max_used_guesses] = stopping_size
+                    # stopping_sets[max_used_guesses] = erasure
                     max_used_guesses = num_guesses
                 
                 # Unerase the guessed bit
@@ -488,7 +545,8 @@ def peel_prune_guess(erasure: np.ndarray, Hindptr: np.ndarray, Hindices: np.ndar
             else:
                 # Guessing budget exhausted: signal failure
                 erasure_sizes[max_used_guesses] = stopping_size
-                return np.ones_like(erasure, dtype=np.uint64)*((1<<64) - 1), num_guesses, max_guesses+1, erasure_sizes
+                # stopping_sets[max_used_guesses] = erasure
+                return np.ones_like(erasure, dtype=np.uint64)*((1<<64) - 1), num_guesses, max_guesses+1, erasure_sizes#, stopping_sets
 
         # Find the corresponding dangling bit
         for bit_idx in Hindices[Hindptr[dangling_check_idx]:Hindptr[dangling_check_idx+1]]:
@@ -533,7 +591,7 @@ def peel_prune_guess(erasure: np.ndarray, Hindptr: np.ndarray, Hindices: np.ndar
     
     # If no erasures left, nor inconsistent equations, check if the alternative corrections are nontrivial (up to a stabilizer)
     assert not np.any(erasure)
-    return bit_correction, num_guesses, max_used_guesses, erasure_sizes
+    return bit_correction, num_guesses, max_used_guesses, erasure_sizes#, stopping_sets
 
 
 def peel(erasure: np.array, H: sp.csr_array) -> bool:
