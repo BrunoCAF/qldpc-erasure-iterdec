@@ -386,6 +386,7 @@ def smallest_connected_component(erasure: np.ndarray,
         if current_component_size < smallest_component_size:
             smallest_component_size = current_component_size
             smallest_component[:smallest_component_size] = current_component[:current_component_size].copy()
+        current_component_size = 0
     
     return smallest_component[:smallest_component_size]
 
