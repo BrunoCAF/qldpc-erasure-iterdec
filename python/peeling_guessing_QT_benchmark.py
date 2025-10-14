@@ -148,7 +148,7 @@ def load_from_mtx(filename, path='../QT_codes/'):
     return sp.csr_array((data[:, 2], (data[:, 0], data[:, 1])), shape=(m, n))
 
 
-filenames = lambda XZ, C: f'H{XZ}_k{2*(C+1)}_w8.mtx'
+filenames = lambda XZ, C: f'H{XZ}_k{2*(C+1)}_w8.mtx' if C < 3 else f'H{XZ}_C4rC4_ord16_trial13_B6_perm4.mtx'
 
 # Tune the physical erasure rates and the MC budget according to the code/decoder
 p_vals = np.linspace(0.05, 0.45, 15)
@@ -186,7 +186,7 @@ if __name__ == '__main__':
     N = Hx.shape[1]
     rx, rz = Hx.shape[1] - code_dimension(Hx), Hz.shape[1] - code_dimension(Hz)
     K = N - rx - rz
-    print(f'Quantum HGP code params: [[N={N}, K={K}]]')
+    print(f'Quantum code params: [[N={N}, K={K}]]')
     params = {'N': N, 'K': K}
 
     # Set simulation parameters

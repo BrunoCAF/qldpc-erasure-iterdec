@@ -344,13 +344,13 @@ def smallest_connected_component(erasure: np.ndarray,
                                  Hindptr: np.ndarray) -> np.ndarray:
     # Keep track of the size of the smallest component, and the current component
     erased_bits = np.nonzero(erasure)[0]
-    smallest_component = erased_bits # initialize with the whole erasure as the CC
+    smallest_component = erased_bits.copy() # initialize with the whole erasure as the CC
     current_component = np.zeros(len(erased_bits), dtype=np.int32)
     current_component_size, smallest_component_size = 0, len(erased_bits)
 
     # Start decomposing the erasure. Need to go all the way, and complete the description 
     # of a component even if I already know it is larger than the minimum
-    unassigned_bits = np.ones_like(reversed_erased_bits) & erasure # to know of when the procedure is done, keep track of the bits still unassigned to a CC
+    unassigned_bits = erasure.copy() # to know of when the procedure is done, keep track of the bits still unassigned to a CC
     unassigned_checks = np.ones(len(Hindptr)-1, dtype=np.int32) # keep track of the assignment of the checks as well to avoid traversing the same check twice
     ub_ptr = 0
     while np.count_nonzero(unassigned_bits) > 0:
