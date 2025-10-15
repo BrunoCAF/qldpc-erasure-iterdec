@@ -148,7 +148,8 @@ def load_from_mtx(filename, path='../QT_codes/'):
     return sp.csr_array((data[:, 2], (data[:, 0], data[:, 1])), shape=(m, n))
 
 
-filenames = lambda XZ, C: f'H{XZ}_k{2*(C+1)}_w8.mtx' if C < 3 else f'H{XZ}_C4rC4_ord16_trial13_B6_perm4.mtx'
+filenames = lambda XZ, C: f'H{XZ}_k{2*(C+1)}_w8.mtx' if C < 3 else {3: f'H{XZ}_C4rC4_ord16_trial13_B6_perm4.mtx', 
+                                                                    4: f'H{XZ}_C4rC4_ord16_trial13_B6_perm4_redundant.mtx'}[C]
 
 # Tune the physical erasure rates and the MC budget according to the code/decoder
 p_vals = np.linspace(0.05, 0.45, 15)
@@ -158,6 +159,7 @@ MC_budget = {
         1: [int(1e7)]*15,
         2: [int(1e7)]*15,
         3: [int(1e7)]*15,
+        4: [int(1e7)]*15,
     }, 
 }
 
