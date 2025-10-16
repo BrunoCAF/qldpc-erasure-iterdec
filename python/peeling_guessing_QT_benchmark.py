@@ -149,7 +149,8 @@ def load_from_mtx(filename, path='../QT_codes/'):
 
 
 filenames = lambda XZ, C: f'H{XZ}_k{2*(C+1)}_w8.mtx' if C < 3 else {3: f'H{XZ}_C4rC4_ord16_trial13_B6_perm4.mtx', 
-                                                                    4: f'H{XZ}_C4rC4_ord16_trial13_B6_perm4_redundant.mtx'}[C]
+                                                                    4: f'H{XZ}_C4rC4_ord16_trial13_B6_perm4_redundant.mtx',
+                                                                    5: f'H{XZ}_576_24_24.mtx'}[C]
 
 # Tune the physical erasure rates and the MC budget according to the code/decoder
 p_vals = np.linspace(0.05, 0.45, 15)
@@ -160,6 +161,7 @@ MC_budget = {
         2: [int(1e7)]*15,
         3: [int(1e7)]*15,
         4: [int(1e7)]*15,
+        5: [int(1e7)]*15,
     }, 
 }
 
@@ -212,8 +214,10 @@ if __name__ == '__main__':
     with h5py.File("peeling_guessing_QT_benchmark.hdf5", "a") as f: 
         if C < 4:
             grp = f.require_group(f'[[{N},{K}]]')
-        else:
+        elif C == 4:
             grp = f.require_group(f'[[{N},{K}]]-reg')
+        else:
+            grp = f.require_group(f'[[{N},{K}, 24]]')
         
         # Store [[N, K, Dbound]] params
         for par, val in params.items():
