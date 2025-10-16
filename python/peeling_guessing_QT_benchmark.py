@@ -210,7 +210,10 @@ if __name__ == '__main__':
     print('Simulation done, saving results...')    
     time.sleep(E)
     with h5py.File("peeling_guessing_QT_benchmark.hdf5", "a") as f: 
-        grp = f.require_group(f'[[{N},{K}]]')
+        if C < 4:
+            grp = f.require_group(f'[[{N},{K}]]')
+        else:
+            grp = f.require_group(f'[[{N},{K}]]-reg')
         
         # Store [[N, K, Dbound]] params
         for par, val in params.items():
