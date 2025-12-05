@@ -24,7 +24,7 @@ class ClusterPeelingBenchmark:
         self.eta_Hx = pym4ri.gen2chk(self.Hx.astype(bool).todense())
         self.eta_Hz = pym4ri.gen2chk(self.Hz.astype(bool).todense())
 
-    def cluster_decode_wrapped(self, erasure: np.ndarray, C_sizes: list[int], only_X: bool=False) -> list[bool]:
+    def cluster_decode_wrapped(self, erasure: np.ndarray, only_X: bool=False) -> list[bool]:
         """
         Wrapper function for Hanwen Yao's cluster peeling decoder. 
         """
@@ -32,19 +32,19 @@ class ClusterPeelingBenchmark:
         erasure_X = erasure.copy()
 
         # Try to solve until both peeling+clustering fails or succeeds
-        cluster_X_success = self._cluster_decode_wrapped(erasure_X, self.Hz, self.eta_Hx, C_sizes)
+        cluster_X_success, max_C_size_X = self._cluster_decode_wrapped(erasure_X, self.Hz, self.eta_Hx)
             
-        if only_X or not cluster_X_success[-1]:
-            return cluster_X_success
+        if only_X or not cluster_X_success:
+            return cluster_X_success, max_C_size_X
         else:
             # Z-type error: 
             erasure_Z = erasure.copy()
 
             # Try to solve until both peeling+clustering fails or succeeds
-            cluster_Z_success = self._cluster_decode_wrapped(erasure_Z, self.Hx, self.eta_Hz, C_sizes)
-            return [cXs and cZs for cXs, cZs in zip(cluster_X_success, cluster_Z_success)]
+            cluster_Z_success, max_C_size_Z = self._cluster_decode_wrapped(erasure_Z, self.Hx, self.eta_Hz)
+            return cluster_X_success and cluster_Z_success, max(max_C_size_X, max_C_size_Z)
 
-    def _cluster_decode_wrapped(self, erasure: np.ndarray, std_H: sp.csr_array, eta_H_conj: np.ndarray, C_sizes: list[int]) -> list[bool]:
+    def _cluster_decode_wrapped(self, erasure: np.ndarray, std_H: sp.csr_array, eta_H_conj: np.ndarray) -> list[bool]:
         
         H_coo = sp.coo_array(std_H)
         ClusterDecoderObj = cluster_decoder(*std_H.shape[::-1], H_coo.row, H_coo.col)
@@ -53,14 +53,14 @@ class ClusterPeelingBenchmark:
         error = erasure & (npr.rand(self.N) < 0.5)
         syndrome = (std_H @ error) & 1
 
-        decoded_err, max_C_size, *_ = ClusterDecoderObj.decode(erasure, syndrome, C_sizes)
+        decoded_err, max_C_size, *_ = ClusterDecoderObj.decode(erasure, syndrome)
         
         if decoded_err is None:
-            return [False for _ in C_sizes]
+            return False, max_C_size
         else:
             residual_err = (decoded_err ^ error.astype(np.int64)).astype(bool)
             is_stab = not np.any(pym4ri.gf2_mul(eta_H_conj[:, initial_erasure], residual_err.reshape(-1, 1)[initial_erasure, :]))
-            return [(max_C_size <= C) and is_stab for C in C_sizes]
+            return is_stab, max_C_size
 
     def cluster_peeling_benchmark(self, p_vals: np.ndarray[float], max_num_trials: int, min_num_fails: int=100, C_sizes: list[int]=None,
                                   only_X: bool=False) -> dict[str, np.ndarray]:
@@ -73,7 +73,8 @@ class ClusterPeelingBenchmark:
         eb = lambda n_fail, n_total: 1.96*std(n_fail, n_total)/np.sqrt(n_total)
         
         cluster_stats = {C: {"ler": np.zeros_like(p_vals), "ler_eb": np.zeros_like(p_vals)} for C in C_sizes}
-        cluster_failures = {C: np.zeros_like(p_vals) for C in C_sizes}
+        # cluster_failures = {C: np.zeros_like(p_vals) for C in C_sizes}
+        cluster_failures = {N+1: np.zeros_like(p_vals)} # a failure for C=N+1 means ML failure
 
         # self.min_SS_size = {"cluster": [N for _ in C_sizes]}
         # self.avg_SS_size_by_er = [{"cluster": [[] for _ in C_sizes]} for _ in range(len(p_vals))]
@@ -99,19 +100,25 @@ class ClusterPeelingBenchmark:
                 self.ML_Z_success = not np.any(pym4ri.gf2_mul(eta_Hz_E, gamma_Hx_E))
                 self.ML_success = self.ML_X_success and self.ML_Z_success
                 
-                cluster_success = self.cluster_decode_wrapped(erasure.copy(), C_sizes=C_sizes, only_X=only_X)
+                cluster_success, max_cluster_size = self.cluster_decode_wrapped(erasure.copy(), only_X=only_X)
 
-                # Adjust failure criterion:
-                cluster_success = [cs and self.ML_success for cs in cluster_success]
+                # Adjust failure criterion: (Hanwen's decoder doesn't give up when the erasure is not correctable)
+                cluster_success &= self.ML_success
+                C_key = max_cluster_size if cluster_success else N+1
 
-                for cluster_failures_C, cluster_success_C in zip(cluster_failures.values(), cluster_success):
-                    cluster_failures_C[i] += 1 if not cluster_success_C else 0              
+                if C_key not in cluster_failures:
+                    cluster_failures[C_key] = np.zeros_like(p_vals)
+                cluster_failures[C_key][i] += 1
                 
-                if min(v[0] for k, v in cluster_failures.items()) >= min_num_fails:
+                # if min(v[i] for k, v in cluster_failures.items()) >= min_num_fails:
+                if cluster_failures[N+1][i] >= min_num_fails:
                     num_trials = t+1
                     break
                         
-            for cluster_stats_C, cluster_failures_C in zip(cluster_stats.values(), cluster_failures.values()):
+            cluster_stats = {C: {"ler": np.zeros_like(p_vals), "ler_eb": np.zeros_like(p_vals)} for C in C_sizes}
+            for C_size, cluster_stats_C in cluster_stats.items():
+                cluster_failures_C = sum(n_fails for C_key, n_fails in cluster_failures.items() if C_size < C_key)
+                # num_trials = sum(cluster_failures.values())[i]
                 cluster_stats_C["ler"][i] = mean(cluster_failures_C[i], num_trials)
                 cluster_stats_C["ler_eb"][i] = eb(cluster_failures_C[i], num_trials)
             
@@ -122,7 +129,7 @@ class ClusterPeelingBenchmark:
         #     "cluster": np.stack([np.array(self.avg_SS_size_by_er[i]["cluster"]) for i in range(len(p_vals))]), 
         # }
         
-        return cluster_stats
+        return cluster_stats, cluster_failures
 
 
 def load_from_mtx(filename, path='../QT_codes/'):
@@ -188,7 +195,7 @@ MC_budget = [int(1e6)]*15
 #     6: [int(1e7)]*15,
 # }
 
-C_sizes_param = [10, 20, 50, 100]
+# C_sizes_param = [10, 20, 50, 100]
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -237,7 +244,7 @@ if __name__ == '__main__':
     code_bm_obj = ClusterPeelingBenchmark(Hx, Hz)
     print('Running cluster decoding benchmark...')
     t0 = time.time()
-    cluster_stats = code_bm_obj.cluster_peeling_benchmark([er], max_num_trials=MC, C_sizes=C_sizes_param)
+    cluster_stats, cluster_failures = code_bm_obj.cluster_peeling_benchmark([er], max_num_trials=MC)
     dt = time.time() - t0
     print(f'Cluster done in {dt:.3f} s')
     # print(f'{code_bm_obj.min_SS_size = }')
@@ -264,6 +271,19 @@ if __name__ == '__main__':
             if f"cluster_C{c}_ler" not in subgrp:
                 subgrp.create_dataset(f"cluster_C{c}_ler", data=cluster_stats_C['ler'])
                 subgrp.create_dataset(f"cluster_C{c}_eb", data=cluster_stats_C['ler_eb'])
+
+        # Store failure counts vs cluster size distribution
+        if "cluster_failure_sizes" not in subgrp:
+            subgrp.create_dataset("cluster_failure_sizes", data=np.array(sorted(cluster_failures)))
+            subgrp.create_dataset("cluster_failure_count", data=np.concatenate([cluster_failures[C_key] for C_key in sorted(cluster_failures)]))
+        else:
+            cf_sizes, cf_count = subgrp["cluster_failure_sizes"][()], subgrp["cluster_failure_count"][()]
+            del subgrp["cluster_failure_sizes"]
+            del subgrp["cluster_failure_count"]
+            for C_size, n_fail in zip(cf_sizes, cf_count):
+                cluster_failures[C_size] = n_fail + cluster_failures.get(C_size, np.array([0]))
+            subgrp.create_dataset("cluster_failure_sizes", data=np.array(sorted(cluster_failures)))
+            subgrp.create_dataset("cluster_failure_count", data=np.concatenate([cluster_failures[C_key] for C_key in sorted(cluster_failures)]))
 
         # # Store SS size statistics for each decoder
         # if f"avgSS_cluster_C={C}" not in subgrp:

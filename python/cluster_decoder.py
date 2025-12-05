@@ -216,9 +216,7 @@ class cluster_decoder:
         self.size_clusters_n = []
         self.size_clusters_m = []
         
-    def decode(self, erasure_vec, syndrome, C_sizes=None, debug = 0):
-        if C_sizes is None:
-            C_sizes = [self.n]
+    def decode(self, erasure_vec, syndrome, debug = 0):
 
         self.peeler._load(erasure_vec, syndrome)
         
@@ -263,18 +261,18 @@ class cluster_decoder:
 
             # >>> ADD THIS BLOCK <<<
             largest_cluster_size = max(self.size_clusters_n) if self.size_clusters_n else 0
-            if largest_cluster_size > max(C_sizes):
-                if debug:
-                    print(f"[abort] largest cluster size = {largest_cluster_size} > cap = {max(C_sizes)}")
-                # Return a structured “gave up” signal; err is partial (peeling-only)
-                return (
-                    None,                  # decoded_err not produced
-                    largest_cluster_size,  # largest cluster size
-                    self.size_isolated_comps_n,
-                    self.size_isolated_comps_m,
-                    self.size_clusters_n,
-                    self.size_clusters_m,
-                )
+            # if largest_cluster_size > max(C_sizes):
+            #     if debug:
+            #         print(f"[abort] largest cluster size = {largest_cluster_size} > cap = {max(C_sizes)}")
+            #     # Return a structured “gave up” signal; err is partial (peeling-only)
+            #     return (
+            #         None,                  # decoded_err not produced
+            #         largest_cluster_size,  # largest cluster size
+            #         self.size_isolated_comps_n,
+            #         self.size_isolated_comps_m,
+            #         self.size_clusters_n,
+            #         self.size_clusters_m,
+            #     )
             
             if debug:
                 self.print_forest()
