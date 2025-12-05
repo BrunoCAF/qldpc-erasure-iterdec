@@ -83,6 +83,7 @@ class ClusterPeelingBenchmark:
         # self.avg_SS_size_by_er = [{"cluster": [[] for _ in C_sizes]} for _ in range(len(p_vals))]
         
         for i, er in enumerate(p_vals):
+            done = False
             num_trials = max_num_trials
             # self.avg_SS_size = self.avg_SS_size_by_er[i]
             for t in (pbar := tqdm(range(max_num_trials), disable=False, miniters=100, mininterval=15, maxinterval=np.infty)):
@@ -115,6 +116,7 @@ class ClusterPeelingBenchmark:
                 # if min(v[i] for k, v in cluster_failures.items()) >= min_num_fails:
                 if cluster_failures[N+1][i] >= min_num_fails:
                     num_trials = t+1
+                    done = True
                     break
                         
             cluster_stats = {C: {"ler": np.zeros_like(p_vals), "ler_eb": np.zeros_like(p_vals)} for C in C_sizes}
@@ -131,7 +133,7 @@ class ClusterPeelingBenchmark:
         #     "cluster": np.stack([np.array(self.avg_SS_size_by_er[i]["cluster"]) for i in range(len(p_vals))]), 
         # }
         
-        return cluster_stats, cluster_failures
+        return cluster_stats, cluster_failures, done
 
 
 def load_from_mtx(filename, path='../QT_codes/'):
@@ -250,7 +252,7 @@ if __name__ == '__main__':
         code_bm_obj = ClusterPeelingBenchmark(Hx, Hz)
         print('Running cluster decoding benchmark...')
         t0 = time.time()
-        cluster_stats, cluster_failures = code_bm_obj.cluster_peeling_benchmark([er], max_num_trials=subMC)
+        cluster_stats, cluster_failures, done = code_bm_obj.cluster_peeling_benchmark([er], max_num_trials=subMC)
         dt = time.time() - t0
         print(f'Cluster done in {dt:.3f} s')
         # print(f'{code_bm_obj.min_SS_size = }')
@@ -296,5 +298,9 @@ if __name__ == '__main__':
             #     subgrp.create_dataset(f"avgSS_cluster_C={C}", data=code_bm_obj.avg_SS_size_by_er["cluster"].flatten())
             
             print(f'Checkpoint #{chkpnt+1}/10 saved. ')
+
+        if done:
+            print('Desired accuracy achieved. Let\'s call it a day. ')
+            break
     
     print('Results saved. All done.')
