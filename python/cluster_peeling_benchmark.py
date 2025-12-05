@@ -243,54 +243,58 @@ if __name__ == '__main__':
     er = p_vals[E]
     print(f'Error rate: {er:.3f} | MC budget: {MC:1.0g} trials')
 
-    # Run simulation
-    code_bm_obj = ClusterPeelingBenchmark(Hx, Hz)
-    print('Running cluster decoding benchmark...')
-    t0 = time.time()
-    cluster_stats, cluster_failures = code_bm_obj.cluster_peeling_benchmark([er], max_num_trials=MC)
-    dt = time.time() - t0
-    print(f'Cluster done in {dt:.3f} s')
-    # print(f'{code_bm_obj.min_SS_size = }')
+    # Split MC budget into checkpoints
+    for chkpnt in tqdm(range(10)):
+        subMC = MC//10
+        # Run simulation
+        code_bm_obj = ClusterPeelingBenchmark(Hx, Hz)
+        print('Running cluster decoding benchmark...')
+        t0 = time.time()
+        cluster_stats, cluster_failures = code_bm_obj.cluster_peeling_benchmark([er], max_num_trials=subMC)
+        dt = time.time() - t0
+        print(f'Cluster done in {dt:.3f} s')
+        # print(f'{code_bm_obj.min_SS_size = }')
 
 
-    # Save results
-    print('Simulation done, saving results...')    
-    time.sleep(E)
-    with h5py.File(f"cluster_peeling_{code_family}_benchmark.hdf5", "a") as f: 
-        code_label = labels[F][C]
-        grp = f.require_group(code_label)
-        
-        # Store [[N, K, Dbound]] params
-        for par, val in params.items():
-            grp.attrs[str(par)] = val
+        # Save results
+        print('Simulation done, saving results...')    
+        time.sleep(npr.rand())
+        with h5py.File(f"cluster_peeling_{code_family}_benchmark.hdf5", "a") as f: 
+            code_label = labels[F][C]
+            grp = f.require_group(code_label)
+            
+            # Store [[N, K, Dbound]] params
+            for par, val in params.items():
+                grp.attrs[str(par)] = val
 
-        # for C, s in enumerate(code_bm_obj.min_SS_size["cluster"]):
-        #     grp.attrs[f"minSS_cluster_C={C}"] = min(grp.attrs[f"minSS_cluster_C={C}"], s) if f"minSS_cluster_C={C}" in grp.attrs else s
-        
-        subgrp = grp.require_group(f'ER={E}')
-        
-        # Store LER statistics for each decoder
-        for c, cluster_stats_C in cluster_stats.items():
-            if f"cluster_C{c}_ler" not in subgrp:
-                subgrp.create_dataset(f"cluster_C{c}_ler", data=cluster_stats_C['ler'])
-                subgrp.create_dataset(f"cluster_C{c}_eb", data=cluster_stats_C['ler_eb'])
+            # for C, s in enumerate(code_bm_obj.min_SS_size["cluster"]):
+            #     grp.attrs[f"minSS_cluster_C={C}"] = min(grp.attrs[f"minSS_cluster_C={C}"], s) if f"minSS_cluster_C={C}" in grp.attrs else s
+            
+            subgrp = grp.require_group(f'ER={E}')
+            
+            # Store LER statistics for each decoder
+            for c, cluster_stats_C in cluster_stats.items():
+                if f"cluster_C{c}_ler" not in subgrp:
+                    subgrp.create_dataset(f"cluster_C{c}_ler", data=cluster_stats_C['ler'])
+                    subgrp.create_dataset(f"cluster_C{c}_eb", data=cluster_stats_C['ler_eb'])
 
-        # Store failure counts vs cluster size distribution
-        if "cluster_failure_sizes" not in subgrp:
-            subgrp.create_dataset("cluster_failure_sizes", data=np.array(sorted(cluster_failures)))
-            subgrp.create_dataset("cluster_failure_count", data=np.concatenate([cluster_failures[C_key] for C_key in sorted(cluster_failures)]))
-        else:
-            cf_sizes, cf_count = subgrp["cluster_failure_sizes"][()], subgrp["cluster_failure_count"][()]
-            del subgrp["cluster_failure_sizes"]
-            del subgrp["cluster_failure_count"]
-            for C_size, n_fail in zip(cf_sizes, cf_count):
-                cluster_failures[C_size] = n_fail + cluster_failures.get(C_size, np.array([0]))
-            subgrp.create_dataset("cluster_failure_sizes", data=np.array(sorted(cluster_failures)))
-            subgrp.create_dataset("cluster_failure_count", data=np.concatenate([cluster_failures[C_key] for C_key in sorted(cluster_failures)]))
+            # Store failure counts vs cluster size distribution
+            if "cluster_failure_sizes" not in subgrp:
+                subgrp.create_dataset("cluster_failure_sizes", data=np.array(sorted(cluster_failures)))
+                subgrp.create_dataset("cluster_failure_count", data=np.concatenate([cluster_failures[C_key] for C_key in sorted(cluster_failures)]))
+            else:
+                cf_sizes, cf_count = subgrp["cluster_failure_sizes"][()], subgrp["cluster_failure_count"][()]
+                del subgrp["cluster_failure_sizes"]
+                del subgrp["cluster_failure_count"]
+                for C_size, n_fail in zip(cf_sizes, cf_count):
+                    cluster_failures[C_size] = n_fail + cluster_failures.get(C_size, np.array([0]))
+                subgrp.create_dataset("cluster_failure_sizes", data=np.array(sorted(cluster_failures)))
+                subgrp.create_dataset("cluster_failure_count", data=np.concatenate([cluster_failures[C_key] for C_key in sorted(cluster_failures)]))
 
-        # # Store SS size statistics for each decoder
-        # if f"avgSS_cluster_C={C}" not in subgrp:
-        #     subgrp.create_dataset(f"avgSS_cluster_C={C}", data=code_bm_obj.avg_SS_size_by_er["cluster"].flatten())
-        
+            # # Store SS size statistics for each decoder
+            # if f"avgSS_cluster_C={C}" not in subgrp:
+            #     subgrp.create_dataset(f"avgSS_cluster_C={C}", data=code_bm_obj.avg_SS_size_by_er["cluster"].flatten())
+            
+            print(f'Checkpoint #{chkpnt+1}/10 saved. ')
     
     print('Results saved. All done.')
