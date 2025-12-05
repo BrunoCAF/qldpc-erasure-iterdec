@@ -24,7 +24,7 @@ class ClusterPeelingBenchmark:
         self.eta_Hx = pym4ri.gen2chk(self.Hx.astype(bool).todense())
         self.eta_Hz = pym4ri.gen2chk(self.Hz.astype(bool).todense())
 
-    def cluster_decode_wrapped(self, erasure: np.ndarray, only_X: bool=False) -> list[bool]:
+    def cluster_decode_wrapped(self, erasure: np.ndarray, only_X: bool=False) -> int:
         """
         Wrapper function for Hanwen Yao's cluster peeling decoder. 
         """
@@ -32,19 +32,21 @@ class ClusterPeelingBenchmark:
         erasure_X = erasure.copy()
 
         # Try to solve until both peeling+clustering fails or succeeds
-        cluster_X_success, max_C_size_X = self._cluster_decode_wrapped(erasure_X, self.Hz, self.eta_Hx)
+        # cluster_X_success, max_C_size_X = self._cluster_decode_wrapped(erasure_X, self.Hz, self.eta_Hx)
+        max_C_size_X = self._cluster_decode_wrapped(erasure_X, self.Hz, self.eta_Hx)
             
-        if only_X or not cluster_X_success:
-            return cluster_X_success, max_C_size_X
+        if only_X or not self.ML_X_success:
+            return max_C_size_X
         else:
             # Z-type error: 
             erasure_Z = erasure.copy()
 
             # Try to solve until both peeling+clustering fails or succeeds
-            cluster_Z_success, max_C_size_Z = self._cluster_decode_wrapped(erasure_Z, self.Hx, self.eta_Hz)
-            return cluster_X_success and cluster_Z_success, max(max_C_size_X, max_C_size_Z)
+            # cluster_Z_success, max_C_size_Z = self._cluster_decode_wrapped(erasure_Z, self.Hx, self.eta_Hz)
+            max_C_size_Z = self._cluster_decode_wrapped(erasure_Z, self.Hx, self.eta_Hz)
+            return max(max_C_size_X, max_C_size_Z)
 
-    def _cluster_decode_wrapped(self, erasure: np.ndarray, std_H: sp.csr_array, eta_H_conj: np.ndarray) -> list[bool]:
+    def _cluster_decode_wrapped(self, erasure: np.ndarray, std_H: sp.csr_array, eta_H_conj: np.ndarray) -> int:
         
         H_coo = sp.coo_array(std_H)
         ClusterDecoderObj = cluster_decoder(*std_H.shape[::-1], H_coo.row, H_coo.col)
@@ -53,14 +55,15 @@ class ClusterPeelingBenchmark:
         error = erasure & (npr.rand(self.N) < 0.5)
         syndrome = (std_H @ error) & 1
 
-        decoded_err, max_C_size, *_ = ClusterDecoderObj.decode(erasure, syndrome)
+        return ClusterDecoderObj.decode(erasure, syndrome) # modified to yield only max_cluster_size
+        # decoded_err, max_C_size, *_ = ClusterDecoderObj.decode(erasure, syndrome)
         
-        if decoded_err is None:
-            return False, max_C_size
-        else:
-            residual_err = (decoded_err ^ error.astype(np.int64)).astype(bool)
-            is_stab = not np.any(pym4ri.gf2_mul(eta_H_conj[:, initial_erasure], residual_err.reshape(-1, 1)[initial_erasure, :]))
-            return is_stab, max_C_size
+        # if decoded_err is None:
+        #     return False, max_C_size
+        # else:
+        #     residual_err = (decoded_err ^ error.astype(np.int64)).astype(bool)
+        #     is_stab = not np.any(pym4ri.gf2_mul(eta_H_conj[:, initial_erasure], residual_err.reshape(-1, 1)[initial_erasure, :]))
+        #     return is_stab, max_C_size
 
     def cluster_peeling_benchmark(self, p_vals: np.ndarray[float], max_num_trials: int, min_num_fails: int=100, C_sizes: list[int]=None,
                                   only_X: bool=False) -> dict[str, np.ndarray]:
@@ -100,11 +103,10 @@ class ClusterPeelingBenchmark:
                 self.ML_Z_success = not np.any(pym4ri.gf2_mul(eta_Hz_E, gamma_Hx_E))
                 self.ML_success = self.ML_X_success and self.ML_Z_success
                 
-                cluster_success, max_cluster_size = self.cluster_decode_wrapped(erasure.copy(), only_X=only_X)
+                max_cluster_size = self.cluster_decode_wrapped(erasure.copy(), only_X=only_X)
 
                 # Adjust failure criterion: (Hanwen's decoder doesn't give up when the erasure is not correctable)
-                cluster_success &= self.ML_success
-                C_key = max_cluster_size if cluster_success else N+1
+                C_key = max_cluster_size if self.ML_success else N+1
 
                 if C_key not in cluster_failures:
                     cluster_failures[C_key] = np.zeros_like(p_vals)

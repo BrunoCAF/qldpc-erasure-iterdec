@@ -252,7 +252,8 @@ class cluster_decoder:
         self.peeler._peel(debug)
             
         if len(self.peeler.current_v_nodes) == 0:
-            return self.peeler.decoded_err, 0, [], [], [], []
+            # return self.peeler.decoded_err, 0, [], [], [], []
+            return 0
         else:
             
             self.decoded_err = self.peeler.decoded_err
@@ -261,6 +262,7 @@ class cluster_decoder:
 
             # >>> ADD THIS BLOCK <<<
             largest_cluster_size = max(self.size_clusters_n) if self.size_clusters_n else 0
+            return largest_cluster_size
             # if largest_cluster_size > max(C_sizes):
             #     if debug:
             #         print(f"[abort] largest cluster size = {largest_cluster_size} > cap = {max(C_sizes)}")
@@ -274,25 +276,25 @@ class cluster_decoder:
             #         self.size_clusters_m,
             #     )
             
-            if debug:
-                self.print_forest()
-                print(f"stopping set size = {len(self.peeler.current_v_nodes)}")
-                print(f"self.size_isolated_comps_n = {self.size_isolated_comps_n}")
-                print(f"self.size_isolated_comps_m = {self.size_isolated_comps_m}")
-                print(f"self.size_clusters_n = {self.size_clusters_n}")
-                print(f"self.size_clusters_m = {self.size_clusters_m}")
+            # if debug:
+            #     self.print_forest()
+            #     print(f"stopping set size = {len(self.peeler.current_v_nodes)}")
+            #     print(f"self.size_isolated_comps_n = {self.size_isolated_comps_n}")
+            #     print(f"self.size_isolated_comps_m = {self.size_isolated_comps_m}")
+            #     print(f"self.size_clusters_n = {self.size_clusters_n}")
+            #     print(f"self.size_clusters_m = {self.size_clusters_m}")
                 
-            for root in self.roots:
-                self._solve(root, None, 0)
-                if root.frozen == False:
-                    root.value = 0
-                self._resolve(root, None, 0)
+            # for root in self.roots:
+            #     self._solve(root, None, 0)
+            #     if root.frozen == False:
+            #         root.value = 0
+            #     self._resolve(root, None, 0)
                 
-            # check if self.decoded_err match the syndrome
-            if self.peeler.match(self.decoded_err) == False:
-                raise Exception(f"solution after cluster decomposition doesn't match the syndrome.")
+            # # check if self.decoded_err match the syndrome
+            # if self.peeler.match(self.decoded_err) == False:
+            #     raise Exception(f"solution after cluster decomposition doesn't match the syndrome.")
                 
-            return self.decoded_err, largest_cluster_size, self.size_isolated_comps_n, self.size_isolated_comps_m, self.size_clusters_n, self.size_clusters_m                
+            # return self.decoded_err, largest_cluster_size, self.size_isolated_comps_n, self.size_isolated_comps_m, self.size_clusters_n, self.size_clusters_m                
 
     def _build(self, debug = 0):
         '''
