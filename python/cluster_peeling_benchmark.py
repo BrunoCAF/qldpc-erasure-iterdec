@@ -142,11 +142,12 @@ def load_from_mtx(filename, path='../QT_codes/'):
     return sp.csr_array((data[:, 2], (data[:, 0], data[:, 1])), shape=(m, n))
 
 
-filenames = lambda XZ, C: f'H{XZ}_k{2*(C+1)}_w8.mtx'
-# filenames = lambda XZ, C: f'H{XZ}_k{2*(C+1)}_w8.mtx' if C < 3 else {3: f'H{XZ}_C4rC4_ord16_trial13_B6_perm4.mtx', 
-#                                                                     4: f'H{XZ}_C4rC4_ord16_trial13_B6_perm4_redundant.mtx',
-#                                                                     5: f'H{XZ}_576_24_24.mtx',
-#                                                                     6: f'H{XZ}_576_24_24_redundant.mtx'}[C]
+filenames = lambda XZ, C: {
+    0: f'H{XZ}_k2_w8.mtx', 1: f'H{XZ}_k4_w8.mtx', 2: f'H{XZ}_k6_w8.mtx', 
+    3: f'H{XZ}_C4rC4_ord16_trial13_B6_perm4.mtx', 4: f'H{XZ}_576_24_24.mtx', 
+    5: f'H{XZ}_k2_w8_reg.mtx', 6: f'H{XZ}_k4_w8_reg.mtx', 7: f'H{XZ}_k6_w8_reg.mtx', 
+    8: f'H{XZ}_C4rC4_ord16_trial13_B6_perm4_redundant.mtx', 9: f'H{XZ}_576_24_24_redundant.mtx', 
+}[C]
 
 orders = [(12, 12), (30, 6), (21, 18)]
 # orders = [(6, 6), (15, 3), (9, 6), (12, 6), (12, 12), (30, 6), (21, 18)]
@@ -179,14 +180,14 @@ labels = {
         # '[[72,12]]', '[[90,8]]', '[[108,8]]', '[[144,12]]', '[[288,12]]', '[[360,12]]', '[[756,16]]',
     ],
     2: [
-        '[[496,2]]', '[[496,4]]', '[[496,6]]',
-        # '[[496,2]]', '[[496,4]]', '[[496,6]]', '[[576,24,24]]', '[[576,24,24]]-reg', '[[576,24]]', '[[576,24]]-reg',
+        '[[496,2]]', '[[496,4]]', '[[496,6]]', '[[576,24,22]]', '[[576,24,24]]', 
+        '[[496,2]]-reg', '[[496,4]]-reg', '[[496,6]]-reg', '[[576,24,22]]-reg', '[[576,24,24]]-reg', 
     ],
 }
 
 # Tune the physical erasure rates and the MC budget according to the code/decoder
 p_vals = np.linspace(0.05, 0.45, 15)
-MC_budget = [int(1e6)]*15
+MC_budget = [int(1e7)]*15
 # MC_budget = {
 #     0: [int(1e7)]*15,
 #     1: [int(1e7)]*15,
