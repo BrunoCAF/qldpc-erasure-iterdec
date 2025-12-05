@@ -69,7 +69,7 @@ class ClusterPeelingBenchmark:
                                   only_X: bool=False) -> dict[str, np.ndarray]:
         N = self.N
         if C_sizes is None:
-            C_sizes = [N]
+            C_sizes = [N+1]
         
         mean = lambda n_fail, n_total: n_fail/max(1, n_total)
         std = lambda n_fail, n_total: ((n_fail*(n_total - n_fail)) / (n_total*(n_total - 1)))**.5
@@ -88,8 +88,8 @@ class ClusterPeelingBenchmark:
             for t in (pbar := tqdm(range(max_num_trials), disable=False, miniters=100, mininterval=15, maxinterval=np.infty)):
                 if t // 100 == 1:
                     descr = f'#fails '
-                    for C, cluster_failures_C in cluster_failures.items():
-                        descr += f'C={C}: {cluster_failures_C[i]:.0f} | '
+                    for C in C_sizes:
+                        descr += f'C={C}: {cluster_failures.get(C, np.array([0]))[i]:.0f} | '
                     pbar.set_description(descr)
 
                 erasure = npr.rand(N) < er
