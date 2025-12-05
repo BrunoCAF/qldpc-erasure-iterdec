@@ -119,7 +119,7 @@ class ClusterPeelingBenchmark:
                         
             cluster_stats = {C: {"ler": np.zeros_like(p_vals), "ler_eb": np.zeros_like(p_vals)} for C in C_sizes}
             for C_size, cluster_stats_C in cluster_stats.items():
-                cluster_failures_C = sum(n_fails for C_key, n_fails in cluster_failures.items() if C_size < C_key)
+                cluster_failures_C = sum((n_fails for C_key, n_fails in cluster_failures.items() if C_size < C_key), start=np.array([0]))
                 # num_trials = sum(cluster_failures.values())[i]
                 cluster_stats_C["ler"][i] = mean(cluster_failures_C[i], num_trials)
                 cluster_stats_C["ler_eb"][i] = eb(cluster_failures_C[i], num_trials)
