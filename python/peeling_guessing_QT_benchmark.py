@@ -209,7 +209,7 @@ if __name__ == '__main__':
 
     # Set simulation parameters
     er = p_vals[E]
-    print(f'Error rate: {er:.3f} | MC budget (peel): {np.log10(MC):.0g} trials')
+    print(f'Error rate: {er:.3f} | MC budget (peel): {MC:.0g} trials')
 
     # Split MC budget into checkpoints
     for chkpnt in tqdm(range(10)):
