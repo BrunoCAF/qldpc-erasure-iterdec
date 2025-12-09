@@ -19,7 +19,7 @@ class PeelingGuessingBenchmark:
         self.eta_Hx = pym4ri.gen2chk(self.Hx.astype(bool).todense())
         self.eta_Hz = pym4ri.gen2chk(self.Hz.astype(bool).todense())
 
-    def peel_prune_guess_wrapped(self, erasure: np.ndarray, max_pruning_depth: int, max_guesses: int, only_X: bool=False) -> list[bool]:
+    def peel_prune_guess_wrapped(self, erasure: np.ndarray, heuristic: str, max_pruning_depth: int, max_guesses: int, only_X: bool=False) -> list[bool]:
         """
         Peeling+pruning+branching or guessing. 
         Pruning at depth at most 1, but generalizable. 
@@ -29,7 +29,7 @@ class PeelingGuessingBenchmark:
         erasure_X = erasure.copy()
 
         # Try to solve until both peeling+branching fails or succeeds
-        branching_X_success = self._peel_prune_guess_wrapped(erasure_X, self.Hz, self.Hx, self.eta_Hx, max_pruning_depth, max_guesses, 'X')
+        branching_X_success = self._peel_prune_guess_wrapped(erasure_X, self.Hz, self.Hx, self.eta_Hx, heuristic, max_pruning_depth, max_guesses, 'X')
             
         if only_X or not branching_X_success[-1]:
             return branching_X_success
@@ -38,16 +38,16 @@ class PeelingGuessingBenchmark:
             erasure_Z = erasure.copy()
 
             # Try to solve until both peeling+branching fails or succeeds
-            branching_Z_success = self._peel_prune_guess_wrapped(erasure_Z, self.Hx, self.Hz, self.eta_Hz, max_pruning_depth, max_guesses, 'Z')
+            branching_Z_success = self._peel_prune_guess_wrapped(erasure_Z, self.Hx, self.Hz, self.eta_Hz, heuristic, max_pruning_depth, max_guesses, 'Z')
             return [bXs and bZs for bXs, bZs in zip(branching_X_success, branching_Z_success)]
 
-    def _peel_prune_guess_wrapped(self, erasure: np.ndarray, std_H: sp.csr_array, std_Hconj: sp.csr_array, 
-                                  eta_H_conj: np.ndarray, max_pruning_depth: int, max_guesses: int, x_or_z: str) -> list[bool]:
+    def _peel_prune_guess_wrapped(self, erasure: np.ndarray, std_H: sp.csr_array, std_Hconj: sp.csr_array, eta_H_conj: np.ndarray, 
+                                  heuristic: str, max_pruning_depth: int, max_guesses: int, x_or_z: str) -> list[bool]:
         ML_success = {'X': self.ML_X_success, 'Z': self.ML_Z_success}[x_or_z]
         initial_erasure = erasure.copy()
         correction_u64, num_guesses, max_used_guesses, erasure_sizes, _ = peel_prune_guess(erasure, std_H.indptr, std_H.indices, 
                                                                                         std_Hconj.indptr, std_Hconj.indices, 
-                                                                                        max_pruning_depth, max_guesses)
+                                                                                        heuristic, max_pruning_depth, max_guesses)
         num_branches = 1<<num_guesses
         N, B = correction_u64.shape
         correction = np.unpackbits(correction_u64.view(np.uint8).reshape(N, B*8), axis=-1, bitorder='little').astype(bool)[:, :num_branches]
@@ -73,7 +73,7 @@ class PeelingGuessingBenchmark:
 
 
     def peel_guess_benchmark(self, p_vals:np.ndarray[float], max_num_trials:int, min_num_fails:int=100, 
-                             pruning_depth: int=1, max_guesses: int=6, 
+                             heuristic: str='score', pruning_depth: int=1, max_guesses: int=6, 
                              only_X:bool=False) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray], dict[int, dict[str, np.ndarray]], int]:
         N = self.N
         
@@ -116,7 +116,7 @@ class PeelingGuessingBenchmark:
                 self.ML_success = self.ML_X_success and self.ML_Z_success
                 
                 assert pruning_depth <= 1
-                branching_success = self.peel_prune_guess_wrapped(erasure.copy(), pruning_depth, max_guesses, only_X)
+                branching_success = self.peel_prune_guess_wrapped(erasure.copy(), heuristic, pruning_depth, max_guesses, only_X)
 
                 # Sanity check:
                 if self.ML_success < branching_success[-1]:
@@ -185,15 +185,18 @@ if __name__ == '__main__':
     parser.add_argument('-D', action="store", dest='D', default=0, type=int)
     parser.add_argument('-M', action="store", dest='MC', default=None, type=int)
     parser.add_argument('-G', action="store", dest='G', default=6, type=int)
+    parser.add_argument('-H', action="store", dest='H', default=1, type=int)
     args = parser.parse_args()
 
     # Choose the codelength,  error rate, decoder and MC budget
-    C, E, D, G = args.C, args.E, args.D, args.G
+    C, E, D, G, H = args.C, args.E, args.D, args.G, args.H
     if args.MC is None:
         MC = MC_budget[E]
     else:
         MC = args.MC
-    print(f'Script configuration: {C = }, {E = }, {D = }, {G = }, {MC = }')
+
+    heuristic = ['random', 'score', 'smallest_CC'][H]
+    print(f'Script configuration: {C = }, {E = }, {D = }, {G = }, {H = }, {MC = }')
 
     # Set code
     Hx = load_from_mtx(filenames('X', C))
@@ -209,7 +212,7 @@ if __name__ == '__main__':
 
     # Set simulation parameters
     er = p_vals[E]
-    print(f'Error rate: {er:.3f} | MC budget (peel): {MC:.0g} trials')
+    print(f'Error rate: {er:.3f} | MC budget (peel): {MC:1.0g} trials')
 
     # Split MC budget into checkpoints
     for chkpnt in tqdm(range(10)):
@@ -219,7 +222,8 @@ if __name__ == '__main__':
         code_bm_obj = PeelingGuessingBenchmark(Hx, Hz)
         print('Running peeling decoding benchmark...')
         t0 = time.time()
-        ML_stats, branching_stats, num_trials, done = code_bm_obj.peel_guess_benchmark([er], max_num_trials=subMC, pruning_depth=D, max_guesses=G)
+        ML_stats, branching_stats, num_trials, done = code_bm_obj.peel_guess_benchmark([er], max_num_trials=subMC, heuristic=heuristic, 
+                                                                                       pruning_depth=D, max_guesses=G)
         dt = time.time() - t0
         print(f'Peeling done in {dt:.3f} s')
         print(f'{code_bm_obj.min_SS_size = }')
