@@ -9,6 +9,7 @@ import numba
 from tqdm import tqdm
 
 from experiments_settings import gosper_next, long_gosper_next
+from numba_bitset import Bitset
 
 # TODO: implement some strategy for importance sampling
 
@@ -164,13 +165,13 @@ def numba_pack(arr):
 @numba.njit
 def rearrange(arr: np.ndarray, mask: np.uint64) -> np.ndarray:
     # spreaded_mask = np.unpackbits(mask.reshape(1).view(np.uint8), bitorder='little')
-    spreaded_mask = numba_unpack(np.array([mask], dtype=np.uint64).view(np.uint8))
+    spreaded_mask = numba_unpack(mask.view(np.uint8))
     # spreaded_branches = np.unpackbits(arr.view(np.uint8).reshape(-1, 8), bitorder='little').reshape(-1, 64)
-    spreaded_branches = numba_unpack(arr.view(np.uint8)).reshape(-1, 64)
+    spreaded_branches = numba_unpack(arr.flatten().view(np.uint8)).reshape(-1, spreaded_mask.size)
     
     return numba_pack(np.hstack((spreaded_branches[:, spreaded_mask == 0], 
-                                  spreaded_branches[:, spreaded_mask == 1]&0)
-                                ).flatten()).view(np.uint64)
+                                 spreaded_branches[:, spreaded_mask == 1]&0)
+                                 ).flatten()).view(np.uint64).reshape(arr.shape)
     
 
 @numba.njit
@@ -392,7 +393,8 @@ def smallest_connected_component(erasure: np.ndarray,
 
 @numba.njit
 def peel_prune_guess(erasure: np.ndarray, Hindptr: np.ndarray, Hindices: np.ndarray, 
-                     Hconjindptr: np.ndarray, Hconjindices: np.ndarray, max_pruning_depth=1) -> tuple[np.ndarray, int, int, tuple[int]]:   
+                     Hconjindptr: np.ndarray, Hconjindices: np.ndarray, 
+                     max_pruning_depth: int=1, max_guesses: int=6) -> tuple[np.ndarray, int, int, tuple[int]]:   
     # Build adjacency list structure for erased bits, and keep track of their count
     erased_bits = np.nonzero(erasure)[0]
     num_erased_bits = len(erased_bits)
@@ -424,17 +426,16 @@ def peel_prune_guess(erasure: np.ndarray, Hindptr: np.ndarray, Hindices: np.ndar
     pruning_depth = 1
     
     # Guessing parameters
-    guessed_bit_initialization = lambda ng: np.uint64(((1<<(1<<ng)) - 1) << (1<<ng))
-    max_guesses = 6 # max uint type has size 64 = 2**6 bits
+    guessed_bit_initialization = lambda ng: np.array([(((1<<(1<<ng)) - 1) << (1<<ng))], dtype=np.uint64) if ng < 6 else np.array([0]*(1 << (ng-6)) + [-1]*(1 << (ng-6))).astype(np.uint64)
     num_guesses = 0
     max_used_guesses = 0
-    erasure_sizes = np.zeros(7, dtype=np.uint32)
-    # stopping_sets = np.zeros((7, len(erasure)), dtype=np.uint32)
+    erasure_sizes = np.zeros(max_guesses+1, dtype=np.uint32)
+    stopping_sets = np.zeros((max_guesses+1, len(erasure)), dtype=np.uint32)
     stopping_size = 0
     
     # Initialize bit correction and cumulative syndrome branches
-    bit_correction = np.zeros((len(erasure),), dtype=np.uint64)
-    check_syndrome = np.zeros((len(Hindptr)-1,), dtype=np.uint64)
+    bit_correction = np.zeros((len(erasure), (1 << max(0, max_guesses-6))), dtype=np.uint64)
+    check_syndrome = np.zeros((len(Hindptr)-1, (1 << max(0, max_guesses-6))), dtype=np.uint64)
     
     # Main peeling loop
     while num_erased_bits > 0:
@@ -449,16 +450,16 @@ def peel_prune_guess(erasure: np.ndarray, Hindptr: np.ndarray, Hindices: np.ndar
                 # Alternatively, defer consistency verifications to the end, by adding these checks to another stack/queue. 
                 # Another idea, in the opposite direction, whenever you decrease the degrees, check if the equation became empty, 
                 # and verify its consistency right away
-                if check_syndrome[dangling_check_idx] != 0:
+                if np.any(check_syndrome[dangling_check_idx] != 0):
                     assert num_guesses > 0
                     # Select inconsistent branches
-                    branch_mask = check_syndrome[dangling_check_idx]
+                    branch_mask = check_syndrome[dangling_check_idx, :1 << max(0, num_guesses - 6)]
                     # Rearrange branches to free up space
-                    bit_correction = rearrange(bit_correction, branch_mask)
-                    check_syndrome = rearrange(check_syndrome, branch_mask)
+                    bit_correction[:, :1 << max(0, num_guesses - 6)] = rearrange(bit_correction[:, :1 << max(0, num_guesses - 6)], branch_mask)
+                    check_syndrome[:, :1 << max(0, num_guesses - 6)] = rearrange(check_syndrome[:, :1 << max(0, num_guesses - 6)], branch_mask)
                     num_guesses -= 1
-
-                    assert check_syndrome[dangling_check_idx] == 0                    
+                    
+                    assert np.all(check_syndrome[dangling_check_idx] == 0)
                 
                 dangling_check_idx = -1
 
@@ -514,15 +515,20 @@ def peel_prune_guess(erasure: np.ndarray, Hindptr: np.ndarray, Hindices: np.ndar
 
                 # Guess the correction at guess_bit as being 1 and duplicate other values
                 # TODO: think of a more efficient way to do this duplication, i.e., duplicate only the nonempty bits/checks (sparse arrays)
-                bit_correction |= (bit_correction << np.uint64(1<<num_guesses))
-                bit_correction[guess_bit] = guessed_bit_initialization(num_guesses)
-                check_syndrome |= (check_syndrome << np.uint64(1<<num_guesses))
+                if num_guesses < 6:
+                    bit_correction[:, 0] |= (bit_correction[:, 0] << np.uint64(1<<num_guesses))
+                    check_syndrome[:, 0] |= (check_syndrome[:, 0] << np.uint64(1<<num_guesses))
+                else:
+                    bit_correction[:, (1<<(num_guesses-6)):(1<<(num_guesses+1-6))] = bit_correction[:, :(1<<(num_guesses-6))]
+                    check_syndrome[:, (1<<(num_guesses-6)):(1<<(num_guesses+1-6))] = check_syndrome[:, :(1<<(num_guesses-6))]
                 
+                bit_correction[guess_bit, :(1<<(num_guesses+1-6))] = guessed_bit_initialization(num_guesses)
+
                 # Update guessing budget and record stats
                 num_guesses += 1
                 if num_guesses > max_used_guesses:
                     erasure_sizes[max_used_guesses] = stopping_size
-                    # stopping_sets[max_used_guesses] = erasure
+                    stopping_sets[max_used_guesses] = erasure.copy()
                     max_used_guesses = num_guesses
                 
                 # Unerase the guessed bit
@@ -535,7 +541,7 @@ def peel_prune_guess(erasure: np.ndarray, Hindptr: np.ndarray, Hindices: np.ndar
                     check_idx = bit_adj_lists[rev_bit_idx][neighbour_count]
                     check_erasure_degrees[check_idx] -= 1
                     # Propagate branches to check syndromes
-                    check_syndrome[check_idx] ^= bit_correction[guess_bit]
+                    check_syndrome[check_idx, 0:1 << max(0, num_guesses-6)] ^= bit_correction[guess_bit, 0:1 << max(0, num_guesses-6)]
                     # If a check becomes dangling, add it to the stack
                     if check_erasure_degrees[check_idx] == 1:
                         dangling_check_stack[stack_size] = check_idx
@@ -547,8 +553,8 @@ def peel_prune_guess(erasure: np.ndarray, Hindptr: np.ndarray, Hindices: np.ndar
             else:
                 # Guessing budget exhausted: signal failure
                 erasure_sizes[max_used_guesses] = stopping_size
-                # stopping_sets[max_used_guesses] = erasure
-                return np.ones_like(erasure, dtype=np.uint64)*((1<<64) - 1), num_guesses, max_guesses+1, erasure_sizes#, stopping_sets
+                stopping_sets[max_used_guesses] = erasure.copy()
+                return np.ones_like(bit_correction)*np.uint64(-1), num_guesses, max_guesses+1, erasure_sizes, stopping_sets
 
         # Find the corresponding dangling bit
         for bit_idx in Hindices[Hindptr[dangling_check_idx]:Hindptr[dangling_check_idx+1]]:
@@ -558,7 +564,7 @@ def peel_prune_guess(erasure: np.ndarray, Hindptr: np.ndarray, Hindices: np.ndar
         # Unerase it and decrease the erasure count
         erasure[dangling_bit_idx] = False
         # Solve dangling equation for the dangling variable in all branches
-        bit_correction[dangling_bit_idx] = check_syndrome[dangling_check_idx]
+        bit_correction[dangling_bit_idx, 0:1 << max(0, num_guesses-6)] = check_syndrome[dangling_check_idx, 0:1 << max(0, num_guesses-6)]
         num_erased_bits -= 1
         # Decrease the degrees of each neighboring check
         rev_bit_idx = reversed_erased_bits[dangling_bit_idx]
@@ -566,7 +572,7 @@ def peel_prune_guess(erasure: np.ndarray, Hindptr: np.ndarray, Hindices: np.ndar
             check_idx = bit_adj_lists[rev_bit_idx][neighbour_count]
             check_erasure_degrees[check_idx] -= 1
             # Propagate branches to syndromes
-            check_syndrome[check_idx] ^= bit_correction[dangling_bit_idx]
+            check_syndrome[check_idx, 0:1 << max(0, num_guesses-6)] ^= bit_correction[dangling_bit_idx, 0:1 << max(0, num_guesses-6)]
             # If a check becomes dangling, add it to the stack
             if check_erasure_degrees[check_idx] == 1:
                 dangling_check_stack[stack_size] = check_idx
@@ -580,20 +586,229 @@ def peel_prune_guess(erasure: np.ndarray, Hindptr: np.ndarray, Hindices: np.ndar
         assert check_erasure_degrees[dangling_check_idx] == 0
         
         # Verify for consistency
-        if check_syndrome[dangling_check_idx] != 0:
+        if np.any(check_syndrome[dangling_check_idx] != 0):
             assert num_guesses > 0
             # Select inconsistent branches
-            branch_mask = check_syndrome[dangling_check_idx]
+            branch_mask = check_syndrome[dangling_check_idx, :1 << max(0, num_guesses - 6)]
             # Rearrange branches to free up space
-            bit_correction = rearrange(bit_correction, branch_mask)
-            check_syndrome = rearrange(check_syndrome, branch_mask)
+            bit_correction[:, :1 << max(0, num_guesses - 6)] = rearrange(bit_correction[:, :1 << max(0, num_guesses - 6)], branch_mask)
+            check_syndrome[:, :1 << max(0, num_guesses - 6)] = rearrange(check_syndrome[:, :1 << max(0, num_guesses - 6)], branch_mask)
             num_guesses -= 1
-
-            assert check_syndrome[dangling_check_idx] == 0                    
+            
+            assert np.all(check_syndrome[dangling_check_idx] == 0)
     
     # If no erasures left, nor inconsistent equations, check if the alternative corrections are nontrivial (up to a stabilizer)
     assert not np.any(erasure)
-    return bit_correction, num_guesses, max_used_guesses, erasure_sizes#, stopping_sets
+    return bit_correction, num_guesses, max_used_guesses, erasure_sizes, stopping_sets
+
+@numba.njit
+def symbolic_quantum_maxwell(erasure: np.ndarray, Hindptr: np.ndarray, Hindices: np.ndarray, 
+                     Hconjindptr: np.ndarray, Hconjindices: np.ndarray, 
+                     max_guesses: int=6, max_pruning_depth: int=1) -> tuple[np.ndarray, int, int, tuple[int]]:   
+    # Build adjacency list structure for erased bits, and keep track of their count
+    erased_bits = np.nonzero(erasure)[0]
+    num_erased_bits = len(erased_bits)
+    reversed_erased_bits = np.zeros((len(erasure),), dtype=np.int32)
+    for i, e in enumerate(erased_bits):
+        reversed_erased_bits[e] = i
+    bit_adj_lists = np.zeros((num_erased_bits, len(Hindptr)-1), dtype=np.int32)
+    erased_bit_degrees = np.zeros((num_erased_bits,), dtype=np.int32)
+
+    # Keep track of the degree of the checks towards the erasure and stack the dangling checks
+    check_erasure_degrees = np.zeros((len(Hindptr)-1,), dtype=np.int32)
+    dangling_check_stack, stack_size = np.zeros((len(Hindptr)-1,), dtype=np.int32), 0
+    
+    # Populate the adjacency lists of the erased bits and add the first dangling checks
+    for check_idx in range(len(Hindptr)-1):
+        for bit_idx in Hindices[Hindptr[check_idx]:Hindptr[check_idx+1]]:
+            if erasure[bit_idx]:
+                check_erasure_degrees[check_idx] += 1
+                rev_bit_idx = reversed_erased_bits[bit_idx]
+                bit_adj_lists[rev_bit_idx][erased_bit_degrees[rev_bit_idx]] = check_idx
+                erased_bit_degrees[rev_bit_idx] += 1
+
+        if check_erasure_degrees[check_idx] == 1:
+            dangling_check_stack[stack_size] = check_idx
+            stack_size += 1
+
+    # Pruning parameters
+    stab_idx = np.zeros((max_pruning_depth,), dtype=np.int32)
+    pruning_depth = 1
+    
+    # Guessing parameters
+    num_guesses, max_used_guesses = 0, 0
+    erasure_sizes = np.zeros(max_guesses+1, dtype=np.uint32)
+    stopping_size = 0
+    stopping_sets = np.zeros((max_guesses+1, len(erasure)), dtype=np.uint32)
+    
+    # Initialize bit correction and cumulative syndrome branches
+    bit_correction = np.zeros((len(erasure), (1 << max(0, max_guesses-6))), dtype=np.uint64)
+    check_syndrome = np.zeros((len(Hindptr)-1, (1 << max(0, max_guesses-6))), dtype=np.uint64)
+    
+    # Main peeling loop
+    while num_erased_bits > 0:
+        # Find a dangling check
+        dangling_check_idx = -1
+        # Pop checks whose dangling bit has already been unerased
+        while stack_size > 0 and dangling_check_idx == -1:
+            dangling_check_idx = dangling_check_stack[stack_size-1]
+            stack_size -= 1
+            if check_erasure_degrees[dangling_check_idx] == 0:
+                # Verify for consistency. 
+                # Alternatively, defer consistency verifications to the end, by adding these checks to another stack/queue. 
+                # Another idea, in the opposite direction, whenever you decrease the degrees, check if the equation became empty, 
+                # and verify its consistency right away
+                if np.any(check_syndrome[dangling_check_idx] != 0):
+                    assert num_guesses > 0
+                    # Select inconsistent branches
+                    branch_mask = check_syndrome[dangling_check_idx, :1 << max(0, num_guesses - 6)]
+                    # Rearrange branches to free up space
+                    bit_correction[:, :1 << max(0, num_guesses - 6)] = rearrange(bit_correction[:, :1 << max(0, num_guesses - 6)], branch_mask)
+                    check_syndrome[:, :1 << max(0, num_guesses - 6)] = rearrange(check_syndrome[:, :1 << max(0, num_guesses - 6)], branch_mask)
+                    num_guesses -= 1
+                    
+                    assert np.all(check_syndrome[dangling_check_idx] == 0)
+                
+                dangling_check_idx = -1
+
+        
+        # If no dangling check remains, resort to pruning and guessing
+        if dangling_check_idx == -1:
+            # TODO: implement pruning for any depth
+            found_stabilizer = False
+            while pruning_depth <= max_pruning_depth and not found_stabilizer:
+                while stab_idx[0] < len(Hconjindptr)-1 and not found_stabilizer:
+                    # Verify if this stabilizer is supported within the erasure
+                    if erasure[Hconjindices[Hconjindptr[stab_idx[0]]:Hconjindptr[stab_idx[0]+1]]].all():
+                        # Choose a bit as a gauge and unerase it
+                        # Pick first bit of the support
+                        gauge_bit = Hconjindices[Hconjindptr[stab_idx[0]]:Hconjindptr[stab_idx[0]+1]][0]
+                        erasure[gauge_bit] = False
+                        num_erased_bits -= 1
+                        # Decrease the degrees of each neighboring check
+                        rev_bit_idx = reversed_erased_bits[gauge_bit]
+                        for neighbour_count in range(erased_bit_degrees[rev_bit_idx]):
+                            check_idx = bit_adj_lists[rev_bit_idx][neighbour_count]
+                            check_erasure_degrees[check_idx] -= 1
+                            # If a check becomes dangling, add it to the stack
+                            if check_erasure_degrees[check_idx] == 1:
+                                dangling_check_stack[stack_size] = check_idx
+                                stack_size += 1
+                        
+                        found_stabilizer = True
+                    stab_idx[0] += 1
+
+                pruning_depth += stab_idx[0] // (len(Hconjindptr)-1)
+                stab_idx[0] %= len(Hconjindptr)-1
+                
+            if found_stabilizer:
+                continue
+
+
+            if num_guesses == 0:
+                stopping_size = np.count_nonzero(erasure)
+            # If pruning is exhausted, resort to guessing (if available)
+            if num_guesses < max_guesses:
+                # Guess score to choose the guessed bit;                 
+                # guess_candidates = np.nonzero(erasure)[0]
+                guess_candidates = smallest_connected_component(erasure, reversed_erased_bits, bit_adj_lists, erased_bit_degrees, Hindices, Hindptr)
+                guess_score = np.zeros((len(guess_candidates),), dtype=np.int32)
+                for i, b in enumerate(guess_candidates):
+                    rev_bit_idx = reversed_erased_bits[b]
+                    for check_idx in bit_adj_lists[rev_bit_idx]:
+                        if check_erasure_degrees[check_idx] == 2:
+                            guess_score[i] += 1
+                guess_bit = guess_candidates[np.argmax(guess_score)]
+                # guess_bit = npr.choice(guess_candidates)
+
+                # Guess the correction at guess_bit as being 1 and duplicate other values
+                # TODO: think of a more efficient way to do this duplication, i.e., duplicate only the nonempty bits/checks (sparse arrays)
+                if num_guesses < 6:
+                    bit_correction[:, 0] |= (bit_correction[:, 0] << np.uint64(1<<num_guesses))
+                    check_syndrome[:, 0] |= (check_syndrome[:, 0] << np.uint64(1<<num_guesses))
+                else:
+                    bit_correction[:, (1<<(num_guesses-6)):(1<<(num_guesses+1-6))] = bit_correction[:, :(1<<(num_guesses-6))]
+                    check_syndrome[:, (1<<(num_guesses-6)):(1<<(num_guesses+1-6))] = check_syndrome[:, :(1<<(num_guesses-6))]
+                
+                bit_correction[guess_bit, :(1<<(num_guesses+1-6))] = guessed_bit_initialization(num_guesses)
+
+                # Update guessing budget and record stats
+                num_guesses += 1
+                if num_guesses > max_used_guesses:
+                    erasure_sizes[max_used_guesses] = stopping_size
+                    stopping_sets[max_used_guesses] = erasure.copy()
+                    max_used_guesses = num_guesses
+                
+                # Unerase the guessed bit
+                assert erasure[guess_bit]
+                erasure[guess_bit] = False
+                num_erased_bits -= 1
+                # Decrease the degrees of each neighboring check
+                rev_bit_idx = reversed_erased_bits[guess_bit]
+                for neighbour_count in range(erased_bit_degrees[rev_bit_idx]):
+                    check_idx = bit_adj_lists[rev_bit_idx][neighbour_count]
+                    check_erasure_degrees[check_idx] -= 1
+                    # Propagate branches to check syndromes
+                    check_syndrome[check_idx, 0:1 << max(0, num_guesses-6)] ^= bit_correction[guess_bit, 0:1 << max(0, num_guesses-6)]
+                    # If a check becomes dangling, add it to the stack
+                    if check_erasure_degrees[check_idx] == 1:
+                        dangling_check_stack[stack_size] = check_idx
+                        stack_size += 1
+                
+                # Restart the search for dangling checks
+                continue
+                
+            else:
+                # Guessing budget exhausted: signal failure
+                erasure_sizes[max_used_guesses] = stopping_size
+                stopping_sets[max_used_guesses] = erasure.copy()
+                return np.ones_like(bit_correction)*np.uint64(-1), num_guesses, max_guesses+1, erasure_sizes, stopping_sets
+
+        # Find the corresponding dangling bit
+        for bit_idx in Hindices[Hindptr[dangling_check_idx]:Hindptr[dangling_check_idx+1]]:
+            if erasure[bit_idx]:
+                dangling_bit_idx = bit_idx
+                break
+        # Unerase it and decrease the erasure count
+        erasure[dangling_bit_idx] = False
+        # Solve dangling equation for the dangling variable in all branches
+        bit_correction[dangling_bit_idx, 0:1 << max(0, num_guesses-6)] = check_syndrome[dangling_check_idx, 0:1 << max(0, num_guesses-6)]
+        num_erased_bits -= 1
+        # Decrease the degrees of each neighboring check
+        rev_bit_idx = reversed_erased_bits[dangling_bit_idx]
+        for neighbour_count in range(erased_bit_degrees[rev_bit_idx]):
+            check_idx = bit_adj_lists[rev_bit_idx][neighbour_count]
+            check_erasure_degrees[check_idx] -= 1
+            # Propagate branches to syndromes
+            check_syndrome[check_idx, 0:1 << max(0, num_guesses-6)] ^= bit_correction[dangling_bit_idx, 0:1 << max(0, num_guesses-6)]
+            # If a check becomes dangling, add it to the stack
+            if check_erasure_degrees[check_idx] == 1:
+                dangling_check_stack[stack_size] = check_idx
+                stack_size += 1
+
+    
+    # When no erasures are left, check one last time for inconsistencies
+    while stack_size > 0:
+        dangling_check_idx = dangling_check_stack[stack_size-1]
+        stack_size -= 1
+        assert check_erasure_degrees[dangling_check_idx] == 0
+        
+        # Verify for consistency
+        if np.any(check_syndrome[dangling_check_idx] != 0):
+            assert num_guesses > 0
+            # Select inconsistent branches
+            branch_mask = check_syndrome[dangling_check_idx, :1 << max(0, num_guesses - 6)]
+            # Rearrange branches to free up space
+            bit_correction[:, :1 << max(0, num_guesses - 6)] = rearrange(bit_correction[:, :1 << max(0, num_guesses - 6)], branch_mask)
+            check_syndrome[:, :1 << max(0, num_guesses - 6)] = rearrange(check_syndrome[:, :1 << max(0, num_guesses - 6)], branch_mask)
+            num_guesses -= 1
+            
+            assert np.all(check_syndrome[dangling_check_idx] == 0)
+    
+    # If no erasures left, nor inconsistent equations, check if the alternative corrections are nontrivial (up to a stabilizer)
+    assert not np.any(erasure)
+    return bit_correction, num_guesses, max_used_guesses, erasure_sizes, stopping_sets
+
 
 
 def peel(erasure: np.array, H: sp.csr_array) -> bool:

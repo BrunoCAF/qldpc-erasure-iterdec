@@ -19,7 +19,7 @@ class PeelingGuessingBenchmark:
         self.eta_Hx = pym4ri.gen2chk(self.Hx.astype(bool).todense())
         self.eta_Hz = pym4ri.gen2chk(self.Hz.astype(bool).todense())
 
-    def peel_prune_guess_wrapped(self, erasure: np.ndarray, max_pruning_depth: int, only_X: bool=False) -> list[bool]:
+    def peel_prune_guess_wrapped(self, erasure: np.ndarray, max_pruning_depth: int, max_guesses: int, only_X: bool=False) -> list[bool]:
         """
         Peeling+pruning+branching or guessing. 
         Pruning at depth at most 1, but generalizable. 
@@ -29,7 +29,7 @@ class PeelingGuessingBenchmark:
         erasure_X = erasure.copy()
 
         # Try to solve until both peeling+branching fails or succeeds
-        branching_X_success = self._peel_prune_guess_wrapped(erasure_X, self.Hz, self.Hx, self.eta_Hx, max_pruning_depth, 'X')
+        branching_X_success = self._peel_prune_guess_wrapped(erasure_X, self.Hz, self.Hx, self.eta_Hx, max_pruning_depth, max_guesses, 'X')
             
         if only_X or not branching_X_success[-1]:
             return branching_X_success
@@ -38,27 +38,29 @@ class PeelingGuessingBenchmark:
             erasure_Z = erasure.copy()
 
             # Try to solve until both peeling+branching fails or succeeds
-            branching_Z_success = self._peel_prune_guess_wrapped(erasure_Z, self.Hx, self.Hz, self.eta_Hz, max_pruning_depth, 'Z')
+            branching_Z_success = self._peel_prune_guess_wrapped(erasure_Z, self.Hx, self.Hz, self.eta_Hz, max_pruning_depth, max_guesses, 'Z')
             return [bXs and bZs for bXs, bZs in zip(branching_X_success, branching_Z_success)]
 
     def _peel_prune_guess_wrapped(self, erasure: np.ndarray, std_H: sp.csr_array, std_Hconj: sp.csr_array, 
-                                  eta_H_conj: np.ndarray, max_pruning_depth: int, x_or_z: str) -> list[bool]:
+                                  eta_H_conj: np.ndarray, max_pruning_depth: int, max_guesses: int, x_or_z: str) -> list[bool]:
         ML_success = {'X': self.ML_X_success, 'Z': self.ML_Z_success}[x_or_z]
         initial_erasure = erasure.copy()
-        correction_u64, num_guesses, max_used_guesses, erasure_sizes = peel_prune_guess(erasure, std_H.indptr, std_H.indices, 
-                                                                                        std_Hconj.indptr, std_Hconj.indices, max_pruning_depth)
+        correction_u64, num_guesses, max_used_guesses, erasure_sizes, _ = peel_prune_guess(erasure, std_H.indptr, std_H.indices, 
+                                                                                        std_Hconj.indptr, std_Hconj.indices, 
+                                                                                        max_pruning_depth, max_guesses)
         num_branches = 1<<num_guesses
-        correction = np.unpackbits(correction_u64.view(np.uint8).reshape(-1, 8), axis=1, bitorder='little').astype(bool)[:, :num_branches]
+        N, B = correction_u64.shape
+        correction = np.unpackbits(correction_u64.view(np.uint8).reshape(N, B*8), axis=-1, bitorder='little').astype(bool)[:, :num_branches]
 
         if ML_success:
-            for g in range(6+1):
+            for g in range(max_guesses+1):
                 if g < max_used_guesses:
                     self.min_SS_size['branch'][g] = min(self.min_SS_size['branch'][g], erasure_sizes[g])
                     self.avg_SS_size['branch'][g].append(erasure_sizes[g])
                     
         if np.any(correction > initial_erasure[:, None]):
             # Branching failure
-            return [False]*7
+            return [False]*(max_guesses+1)
         else:
             assert not np.any(erasure)
             
@@ -67,11 +69,12 @@ class PeelingGuessingBenchmark:
         if not succ:
             assert not ML_success
             
-        return ([False]*max_used_guesses + [True]*(7-max_used_guesses)) if succ else [False]*7
+        return ([False]*max_used_guesses + [True]*((max_guesses+1)-max_used_guesses)) if succ else [False]*(max_guesses+1)
 
 
-    def peel_guess_benchmark(self, p_vals:np.ndarray[float], max_num_trials:int, min_num_fails:int=100, pruning_depth: int=1,
-                          only_X:bool=False) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray], dict[int, dict[str, np.ndarray]]]:
+    def peel_guess_benchmark(self, p_vals:np.ndarray[float], max_num_trials:int, min_num_fails:int=100, 
+                             pruning_depth: int=1, max_guesses: int=6, 
+                             only_X:bool=False) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray], dict[int, dict[str, np.ndarray]], int]:
         N = self.N
         
         mean = lambda n_fail, n_total: n_fail/max(1, n_total)
@@ -81,20 +84,25 @@ class PeelingGuessingBenchmark:
         ML_stats = {"ler": np.zeros_like(p_vals), "ler_eb": np.zeros_like(p_vals)}
         ML_failures = np.zeros_like(p_vals)
         
-        branching_stats = {g: {"ler": np.zeros_like(p_vals), "ler_eb": np.zeros_like(p_vals)} for g in range(6+1)}
-        branching_failures = {g: np.zeros_like(p_vals) for g in range(6+1)}
+        branching_stats = {g: {"ler": np.zeros_like(p_vals), "ler_eb": np.zeros_like(p_vals)} for g in range(max_guesses+1)}
+        branching_failures = {g: np.zeros_like(p_vals) for g in range(max_guesses+1)}
 
-        self.min_SS_size = {"branch": [N]*7}
-        self.avg_SS_size_by_er = [{"branch": [[] for _ in range(7)]} for _ in range(len(p_vals))]
+        self.min_SS_size = {"branch": [N]*(max_guesses+1)}
+        self.avg_SS_size_by_er = [{"branch": [[] for _ in range(max_guesses+1)]} for _ in range(len(p_vals))]
         
+        done = False
         for i, er in enumerate(p_vals):
             num_trials = max_num_trials
             self.avg_SS_size = self.avg_SS_size_by_er[i]
-            for t in (pbar := tqdm(range(max_num_trials), miniters=1e5, mininterval=1800, maxinterval=np.infty, disable=True)):
-                descr = f'#failures: Branching+Pruning(D={pruning_depth}) '
-                for g, branching_failures_g in branching_failures.items():
-                    descr += f'G={g}: {branching_failures_g[i]:.0f} | '
-                pbar.set_description(descr)
+            for t in (pbar := tqdm(range(max_num_trials), disable=False, miniters=100, mininterval=15, maxinterval=np.infty)):
+                if t // 100 == 1:
+                    # descr = f'#fails: Branch.+Prun.(D={pruning_depth}) '
+                    descr = f'#fails '
+                    # descr += f'G=[0..{max_guesses}]: {np.concatenate([bfv.astype(int) for bfv in branching_failures.values()])}'
+                    descr += f'G<={max_guesses}: {np.concatenate([bfv.astype(int) for bfv in branching_failures.values()])}'
+                    # for g, branching_failures_g in branching_failures.items():
+                    #     descr += f'G={g}: {branching_failures_g[i]:.0f} | '
+                    pbar.set_description(descr)
 
                 erasure = npr.rand(N) < er
                 
@@ -108,7 +116,7 @@ class PeelingGuessingBenchmark:
                 self.ML_success = self.ML_X_success and self.ML_Z_success
                 
                 assert pruning_depth <= 1
-                branching_success = self.peel_prune_guess_wrapped(erasure.copy(), max_pruning_depth=pruning_depth, only_X=only_X)
+                branching_success = self.peel_prune_guess_wrapped(erasure.copy(), pruning_depth, max_guesses, only_X)
 
                 # Sanity check:
                 if self.ML_success < branching_success[-1]:
@@ -121,6 +129,7 @@ class PeelingGuessingBenchmark:
                 
                 if ML_failures[i] >= min_num_fails:
                     num_trials = t+1
+                    done = True
                     break
                         
             ML_stats["ler"][i] = mean(ML_failures[i], num_trials)
@@ -130,14 +139,14 @@ class PeelingGuessingBenchmark:
                 branching_stats_g["ler"][i] = mean(branching_failures_g[i], num_trials)
                 branching_stats_g["ler_eb"][i] = eb(branching_failures_g[i], num_trials)
             
-            for g in range(6+1):
+            for g in range(max_guesses+1):
                 self.avg_SS_size_by_er[i]["branch"][g] = mean(sum(self.avg_SS_size_by_er[i]["branch"][g]), len(self.avg_SS_size_by_er[i]["branch"][g]))
 
         self.avg_SS_size_by_er = {
             "branch": np.stack([np.array(self.avg_SS_size_by_er[i]["branch"]) for i in range(len(p_vals))]), 
         }
         
-        return ML_stats, branching_stats
+        return ML_stats, branching_stats, num_trials, done
 
 
 def load_from_mtx(filename, path='../QT_codes/'):
@@ -148,22 +157,25 @@ def load_from_mtx(filename, path='../QT_codes/'):
     return sp.csr_array((data[:, 2], (data[:, 0], data[:, 1])), shape=(m, n))
 
 
-filenames = lambda XZ, C: f'H{XZ}_k{2*(C+1)}_w8.mtx' if C < 3 else {3: f'H{XZ}_C4rC4_ord16_trial13_B6_perm4.mtx', 
-                                                                    4: f'H{XZ}_C4rC4_ord16_trial13_B6_perm4_redundant.mtx',
-                                                                    5: f'H{XZ}_576_24_24.mtx'}[C]
+filenames = lambda XZ, C: {
+    0: f'H{XZ}_k2_w8.mtx', 1: f'H{XZ}_k4_w8.mtx', 2: f'H{XZ}_k6_w8.mtx', 
+    3: f'H{XZ}_C4rC4_ord16_trial13_B6_perm4.mtx', 4: f'H{XZ}_576_24_24.mtx', 
+    5: f'H{XZ}_k2_w8_reg.mtx', 6: f'H{XZ}_k4_w8_reg.mtx', 7: f'H{XZ}_k6_w8_reg.mtx', 
+    8: f'H{XZ}_C4rC4_ord16_trial13_B6_perm4_redundant.mtx', 9: f'H{XZ}_576_24_24_redundant.mtx', 
+}[C]
+
+labels = [
+    '[[496,2]]', '[[496,4]]', '[[496,6]]', '[[576,24,22]]', '[[576,24,24]]', 
+    '[[496,2]]-reg', '[[496,4]]-reg', '[[496,6]]-reg', '[[576,24,22]]-reg', '[[576,24,24]]-reg', 
+]
 
 # Tune the physical erasure rates and the MC budget according to the code/decoder
 p_vals = np.linspace(0.05, 0.45, 15)
-MC_budget = {
-    "peel": {
-        0: [int(1e7)]*15,
-        1: [int(1e7)]*15,
-        2: [int(1e7)]*15,
-        3: [int(1e7)]*15,
-        4: [int(1e7)]*15,
-        5: [int(1e7)]*15,
-    }, 
-}
+MC_budget = [int(1e7)]*15
+
+func_mean = lambda n_fail, n_total: n_fail/max(1, n_total)
+func_std = lambda n_fail, n_total: ((n_fail*(n_total - n_fail)) / (n_total*(n_total - 1)))**.5
+func_eb = lambda n_fail, n_total: 1.96*func_std(n_fail, n_total)/np.sqrt(n_total)
 
 
 if __name__ == '__main__':
@@ -172,15 +184,16 @@ if __name__ == '__main__':
     parser.add_argument('-E', action="store", dest='E', default=0, type=int, required=True)
     parser.add_argument('-D', action="store", dest='D', default=0, type=int)
     parser.add_argument('-M', action="store", dest='MC', default=None, type=int)
+    parser.add_argument('-G', action="store", dest='G', default=6, type=int)
     args = parser.parse_args()
 
     # Choose the codelength,  error rate, decoder and MC budget
-    C, E, D = args.C, args.E, args.D
+    C, E, D, G = args.C, args.E, args.D, args.G
     if args.MC is None:
-        MC_peel = MC_budget['peel'][C][E]
+        MC = MC_budget[E]
     else:
-        MC_peel = args.MC
-    print(f'Script configuration: {C = }, {E = }, {D = }, {MC_peel = }')
+        MC = args.MC
+    print(f'Script configuration: {C = }, {E = }, {D = }, {G = }, {MC = }')
 
     # Set code
     Hx = load_from_mtx(filenames('X', C))
@@ -196,49 +209,68 @@ if __name__ == '__main__':
 
     # Set simulation parameters
     er = p_vals[E]
-    print(f'Error rate: {er:.3f} | MC budget (peel): 10^{np.log10(MC_peel):.0f} trials')
+    print(f'Error rate: {er:.3f} | MC budget (peel): {np.log10(MC):.0g} trials')
 
-    # Run simulation
-    code_bm_obj = PeelingGuessingBenchmark(Hx, Hz)
-    print('Running peeling decoding benchmark...')
-    t0 = time.time()
-    ML_stats, branching_stats = code_bm_obj.peel_guess_benchmark([er], max_num_trials=MC_peel, pruning_depth=D)
-    dt = time.time() - t0
-    print(f'Peeling done in {dt:.3f} s')
-    print(f'{code_bm_obj.min_SS_size = }')
+    # Split MC budget into checkpoints
+    for chkpnt in tqdm(range(10)):
+        subMC = MC//10
+    
+        # Run simulation
+        code_bm_obj = PeelingGuessingBenchmark(Hx, Hz)
+        print('Running peeling decoding benchmark...')
+        t0 = time.time()
+        ML_stats, branching_stats, num_trials, done = code_bm_obj.peel_guess_benchmark([er], max_num_trials=subMC, pruning_depth=D, max_guesses=G)
+        dt = time.time() - t0
+        print(f'Peeling done in {dt:.3f} s')
+        print(f'{code_bm_obj.min_SS_size = }')
 
+        # Save results
+        print('Simulation done, saving results...')    
+        time.sleep(E/15 + npr.rand())
+        with h5py.File("peeling_guessing_QT_benchmark.hdf5", "a") as f: 
+            code_label = labels[C]
+            grp = f.require_group(code_label)
+            
+            # Store [[N, K, Dbound]] params
+            for par, val in params.items():
+                grp.attrs[str(par)] = val
 
-    # Save results
-    print('Simulation done, saving results...')    
-    time.sleep(E)
-    with h5py.File("peeling_guessing_QT_benchmark.hdf5", "a") as f: 
-        if C < 4:
-            grp = f.require_group(f'[[{N},{K}]]')
-        elif C == 4:
-            grp = f.require_group(f'[[{N},{K}]]-reg')
-        else:
-            grp = f.require_group(f'[[{N},{K}, 24]]')
+            for g, s in enumerate(code_bm_obj.min_SS_size["branch"]):
+                grp.attrs[f"minSS_branch_d={D}_g={g}"] = min(grp.attrs.get(f"minSS_branch_d={D}_g={g}", s), s)
+
+            subgrp = grp.require_group(f'ER={E}')
+            old_ML_trials = subgrp.attrs.get("ML_trials", 0)
+            old_pg_trials = subgrp.attrs.get(f"D{D}_trials", 0)
+            
+            subgrp.attrs["ML_trials"] = old_ML_trials + num_trials
+            subgrp.attrs[f'D{D}_trials'] = old_pg_trials + num_trials
+            
+            # Store LER statistics for each decoder
+            if "ML_ler" not in subgrp:
+                subgrp.create_dataset("ML_ler", data=ML_stats['ler'])
+                subgrp.create_dataset("ML_eb", data=ML_stats['ler_eb'])
+            else:
+                n_fails, n_trials = subgrp["ML_ler"]*old_ML_trials + ML_stats['ler'], subgrp.attrs["ML_trials"]
+                subgrp["ML_ler"][:] = func_mean(n_fails, n_trials)
+                subgrp["ML_eb"][:] = func_eb(n_fails, n_trials)
+
+            for g, branching_stats_g in branching_stats.items():
+                if f"branching_d{D}_g{g}_ler" not in subgrp:
+                    subgrp.create_dataset(f"branching_d{D}_g{g}_ler", data=branching_stats_g['ler'])
+                    subgrp.create_dataset(f"branching_d{D}_g{g}_eb", data=branching_stats_g['ler_eb'])
+                else:
+                    n_fails, n_trials = subgrp[f"branching_d{D}_g{g}_ler"]*old_pg_trials + branching_stats_g['ler'], subgrp.attrs[f"D{D}_trials"]
+                    subgrp[f"branching_d{D}_g{g}_ler"][:] = func_mean(n_fails, n_trials)
+                    subgrp[f"branching_d{D}_g{g}_eb"][:] = func_eb(n_fails, n_trials)
+
+            # # Store SS size statistics for each decoder
+            # if f"avgSS_branch_d={D}" not in subgrp:
+            #     subgrp.create_dataset(f"avgSS_branch_d={D}", data=code_bm_obj.avg_SS_size_by_er["branch"].flatten())
         
-        # Store [[N, K, Dbound]] params
-        for par, val in params.items():
-            grp.attrs[str(par)] = val
+            print(f'Checkpoint #{chkpnt+1}/10 saved. ')
 
-        for g, s in enumerate(code_bm_obj.min_SS_size["branch"]):
-            grp.attrs[f"minSS_branch_d={D}_g={g}"] = min(grp.attrs[f"minSS_branch_d={D}_g={g}"], s) if f"minSS_branch_d={D}_g={g}" in grp.attrs else s
-        
-        subgrp = grp.require_group(f'ER={E}')
-        
-        # Store LER statistics for each decoder
-        if D == 1:
-            subgrp.create_dataset("ML_ler", data=ML_stats['ler'])
-            subgrp.create_dataset("ML_eb", data=ML_stats['ler_eb'])
-
-        for g, branching_stats_g in branching_stats.items():
-            subgrp.create_dataset(f"branching_d{D}_g{g}_ler", data=branching_stats_g['ler'])
-            subgrp.create_dataset(f"branching_d{D}_g{g}_eb", data=branching_stats_g['ler_eb'])
-
-        # Store SS size statistics for each decoder
-        subgrp.create_dataset(f"avgSS_branch_d={D}", data=code_bm_obj.avg_SS_size_by_er["branch"].flatten())
-        
+        if done:
+            print('Desired accuracy achieved. Let\'s call it a day. ')
+            break
     
     print('Results saved. All done.')
