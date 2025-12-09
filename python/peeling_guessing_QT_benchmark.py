@@ -231,7 +231,7 @@ if __name__ == '__main__':
         # Save results
         print('Simulation done, saving results...')    
         time.sleep(E/15 + npr.rand())
-        with h5py.File("peeling_guessing_QT_benchmark.hdf5", "a") as f: 
+        with h5py.File(f"peeling_guessing{'' if H == 1 else '_random'}_QT_benchmark.hdf5", "a") as f: 
             code_label = labels[C]
             grp = f.require_group(code_label)
             
