@@ -250,7 +250,7 @@ if __name__ == '__main__':
                 subgrp.create_dataset("ML_ler", data=ML_stats['ler'])
                 subgrp.create_dataset("ML_eb", data=ML_stats['ler_eb'])
             else:
-                n_fails, n_trials = subgrp["ML_ler"]*old_ML_trials + ML_stats['ler'], subgrp.attrs["ML_trials"]
+                n_fails, n_trials = subgrp["ML_ler"][()]*old_ML_trials + ML_stats['ler'], subgrp.attrs["ML_trials"]
                 subgrp["ML_ler"][:] = func_mean(n_fails, n_trials)
                 subgrp["ML_eb"][:] = func_eb(n_fails, n_trials)
 
@@ -259,7 +259,7 @@ if __name__ == '__main__':
                     subgrp.create_dataset(f"branching_d{D}_g{g}_ler", data=branching_stats_g['ler'])
                     subgrp.create_dataset(f"branching_d{D}_g{g}_eb", data=branching_stats_g['ler_eb'])
                 else:
-                    n_fails, n_trials = subgrp[f"branching_d{D}_g{g}_ler"]*old_pg_trials + branching_stats_g['ler'], subgrp.attrs[f"D{D}_trials"]
+                    n_fails, n_trials = subgrp[f"branching_d{D}_g{g}_ler"][()]*old_pg_trials + branching_stats_g['ler'], subgrp.attrs[f"D{D}_trials"]
                     subgrp[f"branching_d{D}_g{g}_ler"][:] = func_mean(n_fails, n_trials)
                     subgrp[f"branching_d{D}_g{g}_eb"][:] = func_eb(n_fails, n_trials)
 
